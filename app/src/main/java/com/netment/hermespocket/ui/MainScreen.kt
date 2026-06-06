@@ -822,13 +822,13 @@ fun MessageBubble(msg: ChatMessage, onDownloadAttachment: ((String, String) -> U
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = Color(0xFF374151),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.widthIn(max = 220.dp)
                         ) {
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current).data(att.url).crossfade(true).build(),
                                 contentDescription = att.name,
-                                modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp),
-                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier.widthIn(max = 220.dp).heightIn(max = 180.dp),
+                                contentScale = ContentScale.Fit,
                             )
                         }
                     } else {

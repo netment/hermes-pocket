@@ -206,6 +206,24 @@ class MainActivity : ComponentActivity() {
         val item = MessageItem.ChatMsg(ChatMessage(msg, true,
             listOf(HermesWebSocket.Attachment(name, file.absolutePath, size, mime))))
         messages.add(item); saveMessage(item); wsClient?.sendMessage(msg)
+
+        // Upload file bytes via HTTP in background
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bytes = file.readBytes()
+                val httpUrl = AppSettings.getHttpUrl(this@MainActivity)
+                val result = wsClient?.uploadFile(name, bytes, mime, httpUrl)
+                if (result != null) {
+                    Log.d(TAG, "File upload success: $result")
+                    withContext(Dispatchers.Main) { toast("文件上传成功 ✓") }
+                } else {
+                    withContext(Dispatchers.Main) { toast("文件上传失败") }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "File upload error", e)
+                withContext(Dispatchers.Main) { toast("文件上传失败: ${e.message}") }
+            }
+        }
     }
 
     private fun handleImagePick(uri: Uri) {
@@ -541,7 +559,7 @@ class MainActivity : ComponentActivity() {
         // TTS auto-speak disabled — Peft to cloud CosyVoice TTS via Hermes
         if (ttsEnabled && m.text.isNotBlank()) playTts(m.text)
     }
-} }; launch { for (s in c.statusChannel) { connectionStatus = s } }; launch { for (state in c.connectionStateChannel) { connectionState = state } }; launch { for (tp in c.toolChannel) { connectionStatus = if (tp.label.isNotBlank()) tp.label else "执行: ${tp.tool}" } }; launch { for (ap in c.approvalChannel) { pendingApproval = ap; connectionStatus = "等待确认"; messages.add(MessageItem.ApprovalItem(ap)); saveMessage(messages.last()) } }; launch { for (r in c.approvalResolvedChannel) { resolvePendingApproval(if (r.approved) ApprovalStatus.APPROVED else ApprovalStatus.DENIED); connectionStatus = if (r.approved) "已批准" else "已拒绝" } }; launch { for (st in c.sessionStateChannel) { when (st.state) { "thinking" -> { isThinking = true; connectionStatus = "思考中..." }; "awaiting_clarify" -> connectionStatus = "等待回复"; "ready" -> { isThinking = false; connectionStatus = "就绪" } } } }; launch { for (cl in c.clarifyChannel) { connectionStatus = "等待回复"; messages.add(MessageItem.ClarifyItem(cl)); saveMessage(messages.last()) } }; launch { for (cr in c.clarifyResolvedChannel) { val idx = messages.indexOfLast { it is MessageItem.ClarifyItem && it.prompt.clarifyId == cr.clarifyId }; if (idx >= 0) { val item = messages[idx] as MessageItem.ClarifyItem; messages[idx] = item.copy(status = ClarifyStatus.RESOLVED) }; connectionStatus = "就绪" } }; launch { for (stp in c.stepChannel) { connectionStatus = "步骤: ${stp.title}"; val stepInfos = stp.steps.map { s -> StepInfo(s.label, when(s.status) { "done" -> StepStatus.DONE; "running" -> StepStatus.RUNNING; "error" -> StepStatus.ERROR; else -> StepStatus.WAITING }) }; messages.add(MessageItem.StepItem(stp.title, stepInfos)) } }; launch { for (sg in c.suggestionChannel) { messages.add(MessageItem.SuggestionItem(sg.title, sg.content)) } }; launch { for (ec in c.errorCardChannel) { connectionStatus = "错误: ${ec.error.take(15)}"; messages.add(MessageItem.ErrorItem(ec.error, ec.retryable)) } }; launch { for (e in c.errorChannel) { connectionStatus = "错误: ${e.take(15)}"; messages.add(MessageItem.ChatMsg(ChatMessage("⚠️ 错误: $e", false))) } }; c.connect(); connectionStatus = "就绪"
+} }; launch { for (s in c.statusChannel) { connectionStatus = s } }; launch { for (state in c.connectionStateChannel) { connectionState = state } }; launch { for (tp in c.toolChannel) { connectionStatus = if (tp.label.isNotBlank()) tp.label else "执行: ${tp.tool}" } }; launch { for (ap in c.approvalChannel) { pendingApproval = ap; connectionStatus = "等待确认"; messages.add(MessageItem.ApprovalItem(ap)); saveMessage(messages.last()) } }; launch { for (r in c.approvalResolvedChannel) { resolvePendingApproval(if (r.approved) ApprovalStatus.APPROVED else ApprovalStatus.DENIED); connectionStatus = if (r.approved) "已批准" else "已拒绝" } }; launch { for (st in c.sessionStateChannel) { when (st.state) { "thinking" -> { isThinking = true; connectionStatus = "思考中..." }; "awaiting_clarify" -> connectionStatus = "等待回复"; "ready" -> { isThinking = false; connectionStatus = "就绪" } } } }; launch { for (cl in c.clarifyChannel) { connectionStatus = "等待回复"; messages.add(MessageItem.ClarifyItem(cl)); saveMessage(messages.last()) } }; launch { for (cr in c.clarifyResolvedChannel) { val idx = messages.indexOfLast { it is MessageItem.ClarifyItem && it.prompt.clarifyId == cr.clarifyId }; if (idx >= 0) { val item = messages[idx] as MessageItem.ClarifyItem; messages[idx] = item.copy(status = ClarifyStatus.RESOLVED) }; connectionStatus = "就绪" } }; launch { for (stp in c.stepChannel) { connectionStatus = "步骤: ${stp.title}"; val stepInfos = stp.steps.map { s -> StepInfo(s.label, when(s.status) { "done" -> StepStatus.DONE; "running" -> StepStatus.RUNNING; "error" -> StepStatus.ERROR; else -> StepStatus.WAITING }) }; messages.add(MessageItem.StepItem(stp.title, stepInfos)) } }; launch { for (sg in c.suggestionChannel) { messages.add(MessageItem.SuggestionItem(sg.title, sg.content)) } }; launch { for (ec in c.errorCardChannel) { connectionStatus = "错误: ${ec.error.take(15)}"; messages.add(MessageItem.ErrorItem(ec.error, ec.retryable)) } }; launch { for (e in c.errorChannel) { connectionStatus = "错误: ${e.take(15)}"; messages.add(MessageItem.ChatMsg(ChatMessage("⚠️ 错误: $e", false))) } }; launch { for (f in c.fileChannel) { val label = if (f.mime.startsWith("image/")) "🖼️ 图片已上传" else "📎 ${f.name} 已上传"; messages.add(MessageItem.ChatMsg(ChatMessage(label, false))) } }; c.connect(); connectionStatus = "就绪"
         PollWorker.enqueue(this@MainActivity); loadSkills() } }
     private fun reconnectWs() { scope.launch { connectionStatus = "重连中..."; connectWs(currentSession?.hermesSessionId ?: UUID.randomUUID().toString()) } }
 

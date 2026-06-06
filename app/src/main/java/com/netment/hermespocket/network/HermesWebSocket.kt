@@ -42,6 +42,7 @@ class HermesWebSocket(
     val stepChannel = Channel<StepData>(Channel.BUFFERED)
     val suggestionChannel = Channel<SuggestionData>(Channel.BUFFERED)
     val errorCardChannel = Channel<ErrorCardData>(Channel.BUFFERED)
+    val fileChannel = Channel<Attachment>(Channel.BUFFERED)
 
     enum class ConnectionState { CONNECTING, CONNECTED, DISCONNECTED }
     val connectionStateChannel = Channel<ConnectionState>(Channel.CONFLATED)
@@ -202,9 +203,7 @@ class HermesWebSocket(
                                         size = json.optLong("size", 0),
                                         mime = json.optString("mime", "")
                                     )
-                                    scope.launch {
-                                        assistantChannel.send(AssistantMessage("", listOf(att)))
-                                    }
+                                    scope.launch { fileChannel.send(att) }
                                 }
                                 "error" -> scope.launch {
                                     errorChannel.send(json.optString("text", "未知错误"))
