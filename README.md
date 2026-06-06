@@ -69,12 +69,14 @@ sherpa-onnx ASR             + /v1/capabilities 代理        capabilities.db
 
 ## 安装
 
-### 方式一：手机 App（推荐普通用户）
+无论哪种方式，你都需要在手机上安装有数 APK。可以下载预编译的 APK，也可以自行构建。
+
+### 方式一：下载 APK（推荐）
 
 1. **下载 APK**  
-   从 [百度网盘](https://pan.baidu.com)（链接待更新）下载最新版 `hermes-pocket.apk`
+   从百度网盘（链接待更新）下载最新版 APK
 
-2. **安装**  
+2. **安装到手机**  
    将 APK 传到手机，点击安装（需允许「未知来源」安装）
 
 3. **配置服务器地址**  
@@ -85,9 +87,23 @@ sherpa-onnx ASR             + /v1/capabilities 代理        capabilities.db
 4. **开始使用**  
    返回聊天页，看到绿色连接点即表示已连接。试说一句话或打字发消息。
 
-> 💡 也支持自己编译：`git clone` 本项目 → Android Studio 打开 → Build APK
+> 🧪 **体验服务器**：我们计划提供公共体验服务器，无需自建即可试用。敬请期待。
+>
+> 💡 如果你还没有自己的 Hermes 服务器，见下方[方式三](#方式三自建-hermes-服务器推荐开发者)自建。完成后回到这里配置地址即可。
 
-### 方式二：自建 Hermes 服务器（推荐开发者）
+### 方式二：自行构建 APK
+
+```bash
+git clone https://github.com/netment/hermes-pocket.git
+cd hermes-pocket
+# 用 Android Studio 打开项目，或命令行构建：
+./gradlew assembleDebug
+# APK 路径：app/build/outputs/apk/debug/app-debug.apk
+```
+
+构建完成后回到[方式一](#方式一下载-apk推荐)继续安装和配置。
+
+### 方式三：自建 Hermes 服务器（推荐开发者）
 
 #### 1. 安装 Hermes Agent
 

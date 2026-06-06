@@ -196,9 +196,6 @@ class MessageRepository(private val dao: MessageDao) {
             isUser = false,
             timestamp = timestamp
         )
-        is MessageItem.ToolItem -> MessageEntity(
-            sessionId = sessionId, type = "chat_msg", text = "", isUser = false, timestamp = timestamp
-        )
         is MessageItem.FileItem -> MessageEntity(
             sessionId = sessionId, type = "chat_msg", text = "", isUser = false, timestamp = timestamp
         )

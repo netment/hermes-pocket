@@ -76,7 +76,7 @@ object ExportUtil {
                     sb.appendLine()
                 }
                 is MessageItem.ClarifyItem -> { /* skip */ }
-                is MessageItem.ToolItem, is MessageItem.FileItem,
+                is MessageItem.FileItem,
                 is MessageItem.StepItem, is MessageItem.SuggestionItem,
                 is MessageItem.ErrorItem -> { /* skip */ }
                 is MessageItem.ThinkingItem -> { /* skip */ }
@@ -122,7 +122,6 @@ object ExportUtil {
                     obj.put("timestamp", msg.timestamp)
                 }
                 is MessageItem.ClarifyItem -> { /* skip */ }
-                is MessageItem.ToolItem -> { /* skip */ }
                 is MessageItem.FileItem -> { /* skip */ }
                 is MessageItem.StepItem -> { /* skip */ }
                 is MessageItem.SuggestionItem -> { /* skip */ }

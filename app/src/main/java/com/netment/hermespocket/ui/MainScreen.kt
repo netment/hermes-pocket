@@ -83,10 +83,6 @@ sealed class MessageItem {
         val selectedChoice: String? = null,
         val timestamp: Long = System.currentTimeMillis()
     ) : MessageItem()
-    data class ToolItem(
-        val progress: HermesWebSocket.ToolProgress,
-        val timestamp: Long = System.currentTimeMillis()
-    ) : MessageItem()
     data class FileItem(
         val attachment: HermesWebSocket.Attachment,
         val timestamp: Long = System.currentTimeMillis()
@@ -621,7 +617,6 @@ fun MainScreen(
                                         { text -> onClarifyResponse?.invoke(item.prompt.clarifyId, text) } else null
                                 )
                             }
-                            is MessageItem.ToolItem -> ToolProgressCard(item.progress)
                             is MessageItem.FileItem -> FilePreviewCard(
                                 name = item.attachment.name, url = item.attachment.url,
                                 size = item.attachment.size, mime = item.attachment.mime,
@@ -849,40 +844,4 @@ fun MessageBubble(msg: ChatMessage, onDownloadAttachment: ((String, String) -> U
         }
     }
 }
-}
-
-// ── Thinking indicator ──────────────────────────────
-
-@Composable
-fun ThinkingBubble() {
-    val dotCount = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            dotCount.animateTo(1f, tween(400))
-            dotCount.animateTo(2f, tween(400))
-            dotCount.animateTo(3f, tween(400))
-            kotlinx.coroutines.delay(400)
-            dotCount.snapTo(0f)
-        }
-    }
-    val visible = dotCount.value.toInt().coerceIn(0, 3)
-    val dots = "●".repeat(visible) + "○".repeat(3 - visible)
-    Row(
-        modifier = Modifier.padding(start = 12.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF334155)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("思考中", color = Color(0xFF94A3B8), fontSize = 14.sp)
-                Spacer(Modifier.width(8.dp))
-                Text(dots, color = Color(0xFF60A5FA), fontSize = 14.sp, letterSpacing = 2.sp)
-            }
-        }
-    }
 }

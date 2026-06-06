@@ -96,7 +96,7 @@ object BackupUtil {
                                 msgsArr.put(m)
                             }
                             is MessageItem.ClarifyItem -> { /* skip */ }
-                            is MessageItem.ToolItem, is MessageItem.FileItem,
+                            is MessageItem.FileItem,
                             is MessageItem.StepItem, is MessageItem.SuggestionItem,
                             is MessageItem.ErrorItem -> { /* skip */ }
                             is MessageItem.ThinkingItem -> { /* skip */ }

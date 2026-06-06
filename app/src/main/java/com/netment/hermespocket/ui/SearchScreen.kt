@@ -147,7 +147,6 @@ private fun SearchResultCard(
                             is MessageItem.ChatMsg -> it.msg.timestamp
                             is MessageItem.ApprovalItem -> it.timestamp
                             is MessageItem.ClarifyItem -> it.timestamp
-                            is MessageItem.ToolItem -> it.timestamp
                             is MessageItem.FileItem -> it.timestamp
                             is MessageItem.StepItem -> it.timestamp
                             is MessageItem.SuggestionItem -> it.timestamp

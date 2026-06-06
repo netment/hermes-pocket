@@ -19,60 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.netment.hermespocket.network.HermesWebSocket
 
-// ═══════════════════════════════════════════════
-//  ToolProgressCard
-// ═══════════════════════════════════════════════
-
-@Composable
-fun ToolProgressCard(progress: HermesWebSocket.ToolProgress) {
-    val icon = when {
-        progress.status == "completed" -> Icons.Default.CheckCircle
-        progress.status == "error" -> Icons.Default.Error
-        else -> Icons.Default.Build
-    }
-    val borderColor = when (progress.status) {
-        "completed" -> Color(0xFF4ADE80)
-        "error" -> Color(0xFFEF4444)
-        else -> Color(0xFF60A5FA)
-    }
-    val label = progress.label.ifBlank {
-        when (progress.status) {
-            "running" -> "执行中: ${progress.tool}"
-            "completed" -> "✓ ${progress.tool} 完成"
-            "error" -> "✗ ${progress.tool} 失败"
-            else -> progress.tool
-        }
-    }
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E293B),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-    ) {
-        Row(
-            Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, null, tint = borderColor, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(label, color = Color(0xFFE2E8F0), fontSize = 13.sp,
-                modifier = Modifier.weight(1f))
-            if (progress.status == "running") {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    color = Color(0xFF60A5FA),
-                    strokeWidth = 2.dp
-                )
-            }
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════
-//  FilePreviewCard
+// ── FilePreviewCard ─────────────────────────────────
 // ═══════════════════════════════════════════════
 
 @Composable
