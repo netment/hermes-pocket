@@ -95,7 +95,7 @@ fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Lock, null, tint = Color(0xFF4ADE80), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("所有数据存储在手机本地 SQLite 数据库中", color = Color(0xFFE2E8F0), fontSize = 14.sp)
+                        Text("所有数据存储在手机本地数据库中", color = Color(0xFFE2E8F0), fontSize = 14.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CloudOff, null, tint = Color(0xFF4ADE80), modifier = Modifier.size(18.dp))
@@ -105,7 +105,7 @@ fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Share, null, tint = Color(0xFF4ADE80), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("随时导出为 Markdown 或 JSON，完全透明", color = Color(0xFFE2E8F0), fontSize = 14.sp)
+                        Text("随时导出，数据完全透明", color = Color(0xFFE2E8F0), fontSize = 14.sp)
                     }
                 }
             }
