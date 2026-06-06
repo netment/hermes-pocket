@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.voiceassistant"
+    namespace = "com.netment.hermespocket"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.voiceassistant"
+        applicationId = "com.netment.hermespocket"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
