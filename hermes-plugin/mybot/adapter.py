@@ -76,6 +76,7 @@ class MyBotAdapter(BasePlatformAdapter):
         self._app.router.add_get("/health", self._handle_health)
         self._app.router.add_get("/v1/files/{file_id}", self._handle_file_download)
         self._app.router.add_get("/v1/files/{file_id}/info", self._handle_file_info)
+        self._app.router.add_post("/v1/upload", self._handle_file_upload)
         self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
         self._app.router.add_get("/v1/poll", self._handle_poll)
 
@@ -486,6 +487,132 @@ class MyBotAdapter(BasePlatformAdapter):
             "mime": info["mime"],
             "url": f"/v1/files/{file_id}",
         })
+
+    async def _handle_file_upload(self, request) -> Any:
+        """Receive a file upload from a client and save to tool_media."""
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None:
+            return web.Response(status=400, text="No file in request")
+
+        filename = field.filename or "upload.bin"
+        # Sanitize filename
+        safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ")
+        if not safe_name.strip():
+            safe_name = "upload.bin"
+
+        # Read file data
+        data = b""
+        while True:
+            chunk = await field.read_chunk()
+            if not chunk:
+                break
+            data += chunk
+
+        if not data:
+            return web.Response(status=400, text="Empty file")
+
+        # Save to ~/.hermes/tool_media/
+        import os as _os
+        media_dir = Path(_os.path.expanduser("~/.hermes/tool_media"))
+        media_dir.mkdir(parents=True, exist_ok=True)
+
+        file_id = str(uuid.uuid4())
+        ext = Path(safe_name).suffix or ".bin"
+        saved_name = f"{file_id}{ext}"
+        save_path = media_dir / saved_name
+        with open(save_path, "wb") as f:
+            f.write(data)
+
+        size = save_path.stat().st_size
+        mime = self._guess_mime(ext)
+
+        # Register in file registry
+        self._file_registry[file_id] = {
+            "path": str(save_path),
+            "name": safe_name,
+            "size": size,
+            "mime": mime,
+        }
+        logger.info("[mybot] uploaded file: %s → %s (%d bytes)", file_id, safe_name, size)
+
+        # Send a message to the agent about the uploaded file
+        session_id = request.query.get("session_id", "")
+        if session_id:
+            event = MessageEvent(
+                text=f"[用户上传了图片: {safe_name}]",
+                message_type=MessageType.TEXT,
+                source=SessionSource(
+                    platform=Platform("mybot"),
+                    chat_id=session_id,
+                    user_id="mybot-user",
+                ),
+                message_id=str(uuid.uuid4()),
+                raw_message={"file_id": file_id, "name": safe_name, "path": str(save_path)},
+            )
+            if self._message_handler:
+                asyncio.create_task(self._send_file_via_ws(session_id, str(save_path), safe_name))
+                asyncio.create_task(self._process_upload_event(session_id, event))
+
+        return web.json_response({
+            "status": "ok",
+            "file_id": file_id,
+            "name": safe_name,
+            "size": size,
+            "mime": mime,
+        })
+
+    async def _process_upload_event(self, session_id: str, event: MessageEvent):
+        """Process a file upload event through the agent."""
+        try:
+            ws = await self._get_ws(session_id)
+            if ws is None:
+                return
+            await self._ws_send(ws, {"type": "session_state", "state": "thinking"})
+
+            from tools.approval import register_gateway_notify, unregister_gateway_notify, set_current_session_key
+            from gateway.session import build_session_key
+
+            session_key = build_session_key(event.source)
+            token = set_current_session_key(session_key)
+
+            def _notify(approval_data: dict):
+                cmd = approval_data.get("command", "")
+                desc = approval_data.get("description", "")
+                asyncio.run_coroutine_threadsafe(
+                    self.send_exec_approval(session_id, cmd, session_key, desc),
+                    asyncio.get_running_loop()
+                )
+
+            register_gateway_notify(session_key, _notify)
+            try:
+                await self._ws_send(ws, {"type": "tool_progress", "tool": "thinking", "status": "running", "label": "🤔 思考中..."})
+                response = await self._message_handler(event)
+                await self._ws_send(ws, {"type": "tool_progress", "tool": "thinking", "status": "completed", "label": "✅ 完成"})
+
+                text_out = ""
+                if hasattr(self, '_unwrap_ephemeral'):
+                    text_out, _ = self._unwrap_ephemeral(response)
+                elif isinstance(response, str):
+                    text_out = response
+
+                if text_out:
+                    media_files, cleaned = self.extract_media(text_out)
+                    images, cleaned = self.extract_images(cleaned)
+                    local_files, cleaned = self.extract_local_files(cleaned)
+                    cleaned = cleaned.replace("[[audio_as_voice]]", "").replace("[[as_document]]", "").strip()
+                    cleaned = re.sub(r"MEDIA:\\s*\\S+", "", cleaned).strip()
+
+                    if cleaned:
+                        await self.send(session_id, cleaned)
+                    for file_path, _is_voice in media_files:
+                        await self._send_file_via_ws(session_id, file_path)
+                    for file_path in local_files:
+                        await self._send_file_via_ws(session_id, file_path)
+            finally:
+                unregister_gateway_notify(session_key)
+        except Exception as e:
+            logger.error("[mybot] upload event processing failed: %s", e)
 
     # ── Capabilities proxy ───────────────────
 

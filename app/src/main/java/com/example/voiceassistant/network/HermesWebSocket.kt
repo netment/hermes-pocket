@@ -25,6 +25,9 @@ class HermesWebSocket(
     private val baseUrl: String = "ws://localhost:8643",
     val sessionId: String = java.util.UUID.randomUUID().toString()
 ) {
+    // HTTP base URL derived from ws:// → http://
+    val httpBaseUrl: String = baseUrl.replaceFirst("^ws", "http")
+    
     // 输出通道
     val assistantChannel = Channel<AssistantMessage>(Channel.BUFFERED)
     val statusChannel = Channel<String>(Channel.CONFLATED)
@@ -340,6 +343,33 @@ class HermesWebSocket(
             put("text", text)
         }
         ws?.send(json.toString())
+    }
+
+    /** 上传文件到 Hermes 服务器，返回文件信息 JSON（含 file_id, name, url 等） */
+    fun uploadFile(fileName: String, fileBytes: ByteArray, mimeType: String = "image/jpeg"): String? {
+        return try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .build()
+            val body = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("file", fileName,
+                    RequestBody.create(okhttp3.MediaType.parse(mimeType), fileBytes))
+                .build()
+            val request = Request.Builder()
+                .url("$httpBaseUrl/v1/upload?session_id=$sessionId")
+                .post(body)
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                response.body?.string()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun disconnect() {

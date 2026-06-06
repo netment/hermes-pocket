@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import com.example.voiceassistant.data.*
@@ -207,9 +208,25 @@ class MainActivity : ComponentActivity() {
 
     private fun handleImagePick(uri: Uri) {
         val file = FileUtils.copyUriToCache(this, uri, "picked.jpg") ?: return
-        val item = MessageItem.ChatMsg(ChatMessage("[选择了一张图片]", true,
-            listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), "image/jpeg"))))
-        messages.add(item); saveMessage(item); wsClient?.sendMessage("[用户选择了一张图片]")
+        val bytes = file.readBytes()
+        val mime = contentResolver.getType(uri) ?: "image/jpeg"
+        
+        // Upload to Hermes server in background
+        scope.launch(Dispatchers.IO) {
+            val result = wsClient?.uploadFile(file.name, bytes, mime)
+            if (result != null) {
+                // Upload succeeded — agent will process and respond
+                val item = MessageItem.ChatMsg(ChatMessage("[上传了图片: ${file.name}]", true,
+                    listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), mime))))
+                withContext(Dispatchers.Main) {
+                    messages.add(item); saveMessage(item)
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    toast("图片上传失败")
+                }
+            }
+        }
     }
 
     // ── Camera ────────────────────────────────────
