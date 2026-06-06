@@ -1,0 +1,17 @@
+*.apk
+*.aab
+*.aar
+*.so
+*.wasm
+*.data
+*.onnx
+/build/
+/app/build/
+/app/libs/
+/app/src/main/jniLibs/
+/app/src/main/assets/sherpa-onnx-paraformer-zh-small-2024-03-09/
+/app/src/main/assets/silero_vad.onnx
+.gradle/
+local.properties
+.idea/
+*.iml

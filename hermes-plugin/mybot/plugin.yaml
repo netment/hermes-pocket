@@ -1,0 +1,20 @@
+name: mybot
+label: MyBot (WebSocket)
+kind: platform
+version: 1.0.0
+description: WebSocket server for custom Hermes clients (Android, desktop, etc.)
+author: zongping
+requires_env: []
+optional_env:
+  - name: MYBOT_HOST
+    description: "WebSocket listen host (default: 0.0.0.0)"
+    password: false
+  - name: MYBOT_PORT
+    description: "WebSocket listen port (default: 8643)"
+    password: false
+  - name: MYBOT_API_KEY
+    description: "Optional API key for authentication"
+    password: true
+  - name: MYBOT_ALLOW_ALL_USERS
+    description: "Allow all users (set to true)"
+    password: false
