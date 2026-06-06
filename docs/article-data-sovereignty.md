@@ -83,4 +83,4 @@ PUT /v1/capabilities/帮我写作/formats
 
 *Hermes Pocket（有数 / Tomo）已在 GitHub 开源。MIT 协议。*
 
-*项目地址：[github.com/zongpingdeng/hermes-pocket](https://github.com/zongpingdeng/hermes-pocket)*
+*项目地址：[github.com/netment/hermes-pocket](https://github.com/netment/hermes-pocket)*

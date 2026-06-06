@@ -192,8 +192,8 @@ sherpa-onnx ASR             + /v1/capabilities 代理        capabilities.db
 | **FunASR** | 工业级语音识别工具包，模型训练与校对 | [github.com/modelscope/FunASR](https://github.com/modelscope/FunASR) |
 | **CosyVoice** | 阿里通义语音合成，中文 TTS | [github.com/FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice) |
 | **frp** | 内网穿透，手机随时连 Hermes | [github.com/fatedier/frp](https://github.com/fatedier/frp) |
-| **Skill Manager** | 能力→技能映射服务，格式路由引擎 | [github.com/zongpingdeng/skill-manager](https://github.com/zongpingdeng/skill-manager) |
-| **asr-trainer** | ASR 训练流水线：校对→微调→导出→部署 | [github.com/zongpingdeng/asr-trainer](https://github.com/zongpingdeng/asr-trainer) |
+| **Skill Manager** | 能力→技能映射服务，格式路由引擎 | [github.com/netment/skill-manager](https://github.com/netment/skill-manager) |
+| **asr-trainer** | ASR 训练流水线：校对→微调→导出→部署 | [github.com/netment/asr-trainer](https://github.com/netment/asr-trainer) |
 | **SenseVoice** | 多语言语音识别模型（中英日韩粤+情感） | [github.com/FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
 
 ---
