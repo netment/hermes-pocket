@@ -350,7 +350,8 @@ class HermesWebSocket(
         return try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+                .readTimeout(300, TimeUnit.SECONDS)
+                .writeTimeout(300, TimeUnit.SECONDS)
                 .build()
             val body = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)

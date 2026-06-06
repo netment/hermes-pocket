@@ -11,6 +11,10 @@
 
 与 QQ/微信/Telegram 等平台网关不同，有数将一切数据留存在用户手机本地 —— 对话记录、语音输入、AI 生成的文件、图片，全部归你所有，可随时查看、搜索、导出、删除。
 
+## 演示
+
+<img src="docs/images/demo.gif" width="360">
+
 ## 截图
 
 |<img src="docs/screenshots/01-main-chat.png" width="280">|<img src="docs/screenshots/02-main-chat.jpg" width="280">|<img src="docs/screenshots/03-dashboard.jpg" width="280">|

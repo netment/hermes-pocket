@@ -70,7 +70,7 @@ class MyBotAdapter(BasePlatformAdapter):
             logger.error("[mybot] aiohttp not installed")
             return False
 
-        self._app = web.Application()
+        self._app = web.Application(client_max_size=200 * 1024 * 1024)  # 200MB for video uploads
         self._app["mybot_adapter"] = self
         self._app.router.add_get("/v1/ws", self._handle_ws)
         self._app.router.add_get("/health", self._handle_health)

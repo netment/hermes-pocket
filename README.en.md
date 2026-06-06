@@ -11,6 +11,10 @@
 
 Unlike QQ/WeChat/Telegram platform gateways, Hermes Pocket keeps everything on your phone — conversations, voice recordings, AI-generated files, images. All yours. View, search, export, or delete at any time.
 
+## Demo
+
+<img src="docs/images/demo.gif" width="360">
+
 ## Screenshots
 
 |<img src="docs/screenshots/01-main-chat.png" width="280">|<img src="docs/screenshots/02-main-chat.jpg" width="280">|<img src="docs/screenshots/03-dashboard.jpg" width="280">|
