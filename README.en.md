@@ -5,9 +5,9 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/platform-Android-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9%2B-purple.svg)](https://kotlinlang.org)
-[![Hermes](https://img.shields.io/badge/Hermes-Agent-orange.svg)](https://hermes-agent.nousresearch.com)
+[![Hermes](https://img.shields.io/badge/Hermes-Agent-orange.svg)](https://github.com/NousResearch/hermes-agent)
 
-**Hermes Pocket** is the local-first Android client for [Hermes Agent](https://hermes-agent.nousresearch.com) — Hermes in your pocket. The app is called **YouShu (有数)** and can be adapted to any compatible Agent backend.
+**Hermes Pocket** is the local-first Android client for [Hermes Agent](https://github.com/NousResearch/hermes-agent) — Hermes in your pocket. The app is called **YouShu (有数)** and can be adapted to any compatible Agent backend.
 
 Unlike QQ/WeChat/Telegram platform gateways, Hermes Pocket keeps everything on your phone — conversations, voice recordings, AI-generated files, images. All yours. View, search, export, or delete at any time.
 
@@ -263,7 +263,7 @@ Hermes Pocket stands on the shoulders of these open-source projects:
 
 | Project | Description | Link |
 |---------|-------------|------|
-| **Hermes Agent** | AI Agent framework: tool calling, approval, multi-platform gateway | [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com) |
+| **Hermes Agent** | AI Agent framework: tool calling, approval, multi-platform gateway | [hermes-agent.nousresearch.com](https://github.com/NousResearch/hermes-agent) |
 | **sherpa-onnx** | On-device speech recognition inference engine, offline ASR | [github.com/k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) |
 | **FunASR** | Industrial-grade speech recognition toolkit, model training & proofreading | [github.com/modelscope/FunASR](https://github.com/modelscope/FunASR) |
 | **CosyVoice** | Alibaba Tongyi speech synthesis, Chinese TTS | [github.com/FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice) |

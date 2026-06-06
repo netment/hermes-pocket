@@ -5,9 +5,9 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/platform-Android-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9%2B-purple.svg)](https://kotlinlang.org)
-[![Hermes](https://img.shields.io/badge/Hermes-Agent-orange.svg)](https://hermes-agent.nousresearch.com)
+[![Hermes](https://img.shields.io/badge/Hermes-Agent-orange.svg)](https://github.com/NousResearch/hermes-agent)
 
-**Hermes Pocket** 是 [Hermes Agent](https://hermes-agent.nousresearch.com) 的本地优先 Android 客户端——口袋里的赫尔墨斯。App 名称「有数」，后续可接入任意兼容的 Agent 后端。
+**Hermes Pocket** 是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的本地优先 Android 客户端——口袋里的赫尔墨斯。App 名称「有数」，后续可接入任意兼容的 Agent 后端。
 
 与 QQ/微信/Telegram 等平台网关不同，有数将一切数据留存在用户手机本地 —— 对话记录、语音输入、AI 生成的文件、图片，全部归你所有，可随时查看、搜索、导出、删除。
 
@@ -285,7 +285,7 @@ remote_port = 8643
 
 | 项目 | 说明 | 链接 |
 |------|------|------|
-| **Hermes Agent** | AI Agent 框架，提供工具调用、审批、多平台网关 | [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com) |
+| **Hermes Agent** | AI Agent 框架，提供工具调用、审批、多平台网关 | [hermes-agent.nousresearch.com](https://github.com/NousResearch/hermes-agent) |
 | **sherpa-onnx** | 端侧语音识别推理引擎，离线 ASR | [github.com/k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) |
 | **FunASR** | 工业级语音识别工具包，模型训练与校对 | [github.com/modelscope/FunASR](https://github.com/modelscope/FunASR) |
 | **CosyVoice** | 阿里通义语音合成，中文 TTS | [github.com/FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice) |
