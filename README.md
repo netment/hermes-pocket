@@ -13,9 +13,9 @@
 
 ## 截图
 
-|<img src="docs/screenshots/01-main-chat.png" width="280">|<img src="docs/screenshots/02-main-chat.jpg" width="280">|
-|---|---|
-|主聊天界面|聊天界面（深色模式）|
+|<img src="docs/screenshots/01-main-chat.png" width="280">|<img src="docs/screenshots/02-main-chat.jpg" width="280">|<img src="docs/screenshots/03-dashboard.jpg" width="280">|
+|---|---|---|
+|主聊天界面|聊天界面（深色模式）|数据仪表盘|
 
 ## 愿景
 

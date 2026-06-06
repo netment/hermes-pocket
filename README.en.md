@@ -11,6 +11,12 @@
 
 Unlike QQ/WeChat/Telegram platform gateways, Hermes Pocket keeps everything on your phone — conversations, voice recordings, AI-generated files, images. All yours. View, search, export, or delete at any time.
 
+## Screenshots
+
+|<img src="docs/screenshots/01-main-chat.png" width="280">|<img src="docs/screenshots/02-main-chat.jpg" width="280">|<img src="docs/screenshots/03-dashboard.jpg" width="280">|
+|---|---|---|
+|Main Chat|Chat (Dark Mode)|Dashboard|
+
 ## Vision
 
 The paradox of current AI assistants: the more you use them, the more data they collect — but that data trains **someone else's model**. You don't benefit.
