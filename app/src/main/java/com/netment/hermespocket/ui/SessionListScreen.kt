@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -252,6 +254,41 @@ private fun SessionItem(
                             Icons.Default.MoreVert, "更多",
                             tint = Color(0xFF475569), modifier = Modifier.size(16.dp)
                         )
+                        // ── 长按菜单（定位在图标下方）──
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            offset = DpOffset(0.dp, 0.dp)
+                        ) {
+                            if (onPin != null) {
+                                DropdownMenuItem(
+                                    text = { Text(if (session.isPinned) "📌 取消置顶" else "📌 置顶") },
+                                    onClick = { showMenu = false; onPin() }
+                                )
+                            }
+                            if (onUnarchive != null) {
+                                DropdownMenuItem(
+                                    text = { Text("📤 取消归档") },
+                                    onClick = { showMenu = false; onUnarchive() }
+                                )
+                            }
+                            if (onArchive != null) {
+                                DropdownMenuItem(
+                                    text = { Text("📦 归档") },
+                                    onClick = { showMenu = false; onArchive() }
+                                )
+                            }
+                            if (onRename != null) {
+                                DropdownMenuItem(
+                                    text = { Text("✏️ 重命名") },
+                                    onClick = { showMenu = false; showRenameDialog = true }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("🗑️ 删除", color = Color(0xFFEF4444)) },
+                                onClick = { showMenu = false; onDelete?.invoke() }
+                            )
+                        }
                     }
                 }
                 if (session.preview.isNotBlank()) {
@@ -276,38 +313,6 @@ private fun SessionItem(
                 }
             }
         }
-    }
-
-    // ── 长按菜单 ──
-    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-        if (onPin != null) {
-            DropdownMenuItem(
-                text = { Text(if (session.isPinned) "📌 取消置顶" else "📌 置顶") },
-                onClick = { showMenu = false; onPin() }
-            )
-        }
-        if (onUnarchive != null) {
-            DropdownMenuItem(
-                text = { Text("📤 取消归档") },
-                onClick = { showMenu = false; onUnarchive() }
-            )
-        }
-        if (onArchive != null) {
-            DropdownMenuItem(
-                text = { Text("📦 归档") },
-                onClick = { showMenu = false; onArchive() }
-            )
-        }
-        if (onRename != null) {
-            DropdownMenuItem(
-                text = { Text("✏️ 重命名") },
-                onClick = { showMenu = false; showRenameDialog = true }
-            )
-        }
-        DropdownMenuItem(
-            text = { Text("🗑️ 删除", color = Color(0xFFEF4444)) },
-            onClick = { showMenu = false; onDelete?.invoke() }
-        )
     }
 
     // ── 重命名弹窗 ──
