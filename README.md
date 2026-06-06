@@ -103,9 +103,37 @@ cd hermes-pocket
 
 构建完成后回到[方式一](#方式一下载-apk推荐)继续安装和配置。
 
-### 方式三：自建 Hermes 服务器（推荐开发者）
+### 方式三：自建 Hermes 服务器
 
-#### 1. 安装 Hermes Agent
+#### 🐳 A. Docker 一键部署（推荐）
+
+只需一个 DeepSeek API Key 即可启动：
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/netment/hermes-pocket.git
+cd hermes-pocket/deploy
+
+# 2. 配置 API Key
+cp .env.example .env
+# 编辑 .env，填入你的 DeepSeek API Key
+# 获取地址：https://platform.deepseek.com/api_keys
+
+# 3. 一键启动
+docker compose up -d
+```
+
+部署完成后，手机 App 连接 `ws://你的服务器IP:8643` 即可使用。
+
+> 📦 **不含 Skill Manager**：基础部署仅包含 AI 对话核心。如需能力路由（帮我写作、PDF 生成等），加 `--profile full` 启动：
+> ```bash
+> git clone https://github.com/netment/skill-manager.git ../skill-manager
+> docker compose --profile full up -d
+> ```
+
+#### 🛠️ B. 手动安装（适合开发/自定义）
+
+##### 1. 安装 Hermes Agent
 
 ```bash
 # 一键安装
@@ -115,7 +143,7 @@ curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scri
 hermes setup
 ```
 
-#### 2. 安装 mybot 插件（WebSocket 服务，手机连接必需）
+##### 2. 安装 mybot 插件
 
 ```bash
 # 复制插件到 Hermes 插件目录
@@ -131,7 +159,7 @@ hermes plugins enable mybot
 hermes gateway restart
 ```
 
-#### 3. （可选）安装 Skill Manager
+##### 3. （可选）安装 Skill Manager
 
 ```bash
 git clone https://github.com/netment/skill-manager.git ~/skill-manager
@@ -140,7 +168,7 @@ pip install -r requirements.txt
 python server.py &   # 后台运行，默认 8888 端口
 ```
 
-#### 4. 配置 frp 公网穿透
+##### 4. 配置 frp 公网穿透
 
 让你的手机随时随地连接 Hermes：
 

@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  hermes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hermes-pocket
+    ports:
+      - "${MYBOT_PORT:-8643}:8643"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - MYBOT_HOST=0.0.0.0
+      - MYBOT_PORT=8643
+    volumes:
+      - hermes_data:/root/.hermes
+    restart: unless-stopped
+
+  # 可选：Skill Manager（能力路由服务）
+  # 使用方式：docker compose --profile full up
+  skill-manager:
+    image: python:3.11-slim
+    container_name: hermes-skill-manager
+    working_dir: /app
+    ports:
+      - "${SKILL_MANAGER_PORT:-8888}:8888"
+    environment:
+      - FLASK_HOST=0.0.0.0
+    command: >
+      sh -c "pip install flask -q &&
+             python3 server.py"
+    volumes:
+      - ./skill-manager:/app:ro
+    restart: unless-stopped
+    profiles:
+      - full
+
+volumes:
+  hermes_data:

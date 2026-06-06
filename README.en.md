@@ -87,9 +87,37 @@ sherpa-onnx ASR             + /v1/capabilities proxy       capabilities.db
 
 > 💡 You can also build from source: `git clone` this repo → open in Android Studio → Build APK
 
-### Option 2: Self-host Hermes Server (for developers)
+### Option 2: Self-host Hermes Server
 
-#### 1. Install Hermes Agent
+#### 🐳 A. Docker (Recommended)
+
+Just a DeepSeek API Key required:
+
+```bash
+# 1. Clone the project
+git clone https://github.com/netment/hermes-pocket.git
+cd hermes-pocket/deploy
+
+# 2. Configure API Key
+cp .env.example .env
+# Edit .env and paste your DeepSeek API Key
+# Get one at: https://platform.deepseek.com/api_keys
+
+# 3. One-command startup
+docker compose up -d
+```
+
+Once deployed, connect your phone app to `ws://your-server-ip:8643`.
+
+> 📦 **Without Skill Manager**: Basic deployment includes AI chat core only. For capability routing (Help Me Write, PDF generation, etc.), start with `--profile full`:
+> ```bash
+> git clone https://github.com/netment/skill-manager.git ../skill-manager
+> docker compose --profile full up -d
+> ```
+
+#### 🛠️ B. Manual Install (for devs/custom setup)
+
+##### 1. Install Hermes Agent
 
 ```bash
 # One-liner install
@@ -99,7 +127,7 @@ curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scri
 hermes setup
 ```
 
-#### 2. Install mybot plugin (WebSocket server — required for phone connection)
+##### 2. Install mybot plugin
 
 ```bash
 # Copy plugin to Hermes plugins directory
@@ -115,7 +143,7 @@ hermes plugins enable mybot
 hermes gateway restart
 ```
 
-#### 3. (Optional) Install Skill Manager
+##### 3. (Optional) Install Skill Manager
 
 ```bash
 git clone https://github.com/netment/skill-manager.git ~/skill-manager
@@ -124,7 +152,7 @@ pip install -r requirements.txt
 python server.py &   # Run in background, default port 8888
 ```
 
-#### 4. Set up frp tunnel
+##### 4. Set up frp tunnel
 
 Connect your phone to Hermes from anywhere:
 
