@@ -7,7 +7,7 @@
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9%2B-purple.svg)](https://kotlinlang.org)
 [![Hermes](https://img.shields.io/badge/Hermes-Agent-orange.svg)](https://github.com/NousResearch/hermes-agent)
 
-**Hermes Pocket** 是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的本地优先 Android 客户端——口袋里的赫尔墨斯。App 名称「有数」，后续可接入任意兼容的 Agent 后端。
+**Hermes Pocket** 是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的本地优先 Android 客户端——口袋的 Hermes。App 名称「有数」，后续可接入任意兼容的 Agent 后端。
 
 与 QQ/微信/Telegram 等平台网关不同，有数将一切数据留存在用户手机本地 —— 对话记录、语音输入、AI 生成的文件、图片，全部归你所有，可随时查看、搜索、导出、删除。
 
