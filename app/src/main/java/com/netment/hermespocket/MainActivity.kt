@@ -854,10 +854,15 @@ class MainActivity : ComponentActivity() {
     private fun launchBackupImportIntent(): Intent {
         val backupDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "SageBackup")
         backupDir.mkdirs()
+        // Use content:// URI instead of file:// for Android 11+ compatibility
+        val initialUri = DocumentsContract.buildDocumentUri(
+            "com.android.externalstorage.documents",
+            "primary:Documents/SageBackup"
+        )
         return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-            putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.fromFile(backupDir))
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, initialUri)
         }
     }
 
