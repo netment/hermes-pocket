@@ -61,6 +61,82 @@ sherpa-onnx ASR             + /v1/capabilities 代理        capabilities.db
 - **能力路由**: 能力 Chip → adapter 查 Skill Manager 映射 → 自动加载技能 → 按需 clarify 选格式 → 路由子技能
 - **详见**: 设置页可配置所有连接参数
 
+## 安装
+
+### 方式一：手机 App（推荐普通用户）
+
+1. **下载 APK**  
+   从 [百度网盘](https://pan.baidu.com)（链接待更新）下载最新版 `hermes-pocket.apk`
+
+2. **安装**  
+   将 APK 传到手机，点击安装（需允许「未知来源」安装）
+
+3. **配置服务器地址**  
+   打开 App → 设置 → 填入你的 Hermes 服务器地址：
+   - WebSocket 地址：`ws://你的服务器IP:8643`
+   - HTTP 地址：`http://你的服务器IP:8643`
+
+4. **开始使用**  
+   返回聊天页，看到绿色连接点即表示已连接。试说一句话或打字发消息。
+
+> 💡 也支持自己编译：`git clone` 本项目 → Android Studio 打开 → Build APK
+
+### 方式二：自建 Hermes 服务器（推荐开发者）
+
+#### 1. 安装 Hermes Agent
+
+```bash
+# 一键安装
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+
+# 配置模型和 API Key
+hermes setup
+```
+
+#### 2. 安装 mybot 插件（WebSocket 服务，手机连接必需）
+
+```bash
+# 复制插件到 Hermes 插件目录
+cp -r hermes-plugin/mybot ~/.hermes/plugins/
+
+# 设置环境变量
+echo "MYBOT_ALLOW_ALL_USERS=true" >> ~/.hermes/.env
+
+# 启用插件
+hermes plugins enable mybot
+
+# 重启 Gateway
+hermes gateway restart
+```
+
+#### 3. （可选）安装 Skill Manager
+
+```bash
+git clone https://github.com/netment/skill-manager.git ~/skill-manager
+cd ~/skill-manager
+pip install -r requirements.txt
+python server.py &   # 后台运行，默认 8888 端口
+```
+
+#### 4. 配置 frp 公网穿透
+
+让你的手机随时随地连接 Hermes：
+
+```bash
+# 服务器端 frps.ini
+[common]
+bind_port = 7000
+
+# 客户端 frpc.ini
+[hermes-pocket]
+type = tcp
+local_ip = 127.0.0.1
+local_port = 8643
+remote_port = 8643
+```
+
+> 📖 详细 frp 配置见 [frp 文档](https://github.com/fatedier/frp)
+
 ## 能力路由：用户视角 → 技术技能
 
 有数区别于普通聊天客户端的核心设计：**你的意图不直接对应一个技能，而是经过两层映射**。

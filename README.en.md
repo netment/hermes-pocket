@@ -61,6 +61,82 @@ sherpa-onnx ASR             + /v1/capabilities proxy       capabilities.db
 - **Capability Routing**: Capability Chip → adapter queries Skill Manager mapping → auto-loads skills → clarifies format → routes to sub-skill
 - **Details**: Settings page for all connection parameters
 
+## Installation
+
+### Option 1: Phone App (for end users)
+
+1. **Download APK**  
+   Download the latest `hermes-pocket.apk` from [Baidu Cloud](https://pan.baidu.com) (link coming soon)
+
+2. **Install**  
+   Transfer the APK to your phone and tap to install (allow "Unknown sources" if prompted)
+
+3. **Configure server**  
+   Open App → Settings → enter your Hermes server address:
+   - WebSocket: `ws://your-server-ip:8643`
+   - HTTP: `http://your-server-ip:8643`
+
+4. **Start using**  
+   Return to chat — a green dot means you're connected. Speak or type to start.
+
+> 💡 You can also build from source: `git clone` this repo → open in Android Studio → Build APK
+
+### Option 2: Self-host Hermes Server (for developers)
+
+#### 1. Install Hermes Agent
+
+```bash
+# One-liner install
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+
+# Configure model and API key
+hermes setup
+```
+
+#### 2. Install mybot plugin (WebSocket server — required for phone connection)
+
+```bash
+# Copy plugin to Hermes plugins directory
+cp -r hermes-plugin/mybot ~/.hermes/plugins/
+
+# Set environment variable
+echo "MYBOT_ALLOW_ALL_USERS=true" >> ~/.hermes/.env
+
+# Enable the plugin
+hermes plugins enable mybot
+
+# Restart Gateway
+hermes gateway restart
+```
+
+#### 3. (Optional) Install Skill Manager
+
+```bash
+git clone https://github.com/netment/skill-manager.git ~/skill-manager
+cd ~/skill-manager
+pip install -r requirements.txt
+python server.py &   # Run in background, default port 8888
+```
+
+#### 4. Set up frp tunnel
+
+Connect your phone to Hermes from anywhere:
+
+```bash
+# Server-side frps.ini
+[common]
+bind_port = 7000
+
+# Client-side frpc.ini
+[hermes-pocket]
+type = tcp
+local_ip = 127.0.0.1
+local_port = 8643
+remote_port = 8643
+```
+
+> 📖 Full frp setup: [frp docs](https://github.com/fatedier/frp)
+
 ## Capability Routing: User Perspective → Technical Skills
 
 The core design that sets Hermes Pocket apart from typical chat clients: **your intent doesn't map directly to a single skill — it goes through two layers**.
