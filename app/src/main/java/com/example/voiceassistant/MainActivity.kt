@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import com.example.voiceassistant.util.FileUtils
 import com.example.voiceassistant.network.NetworkUtils
 import kotlinx.coroutines.*
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import java.io.File
 import java.net.URL
 import java.net.HttpURLConnection
@@ -208,23 +210,47 @@ class MainActivity : ComponentActivity() {
 
     private fun handleImagePick(uri: Uri) {
         val file = FileUtils.copyUriToCache(this, uri, "picked.jpg") ?: return
-        val bytes = file.readBytes()
         val mime = contentResolver.getType(uri) ?: "image/jpeg"
-        
-        // Upload to Hermes server in background
+
+        // Show sending UI immediately
+        val item = MessageItem.ChatMsg(ChatMessage("[上传了一张图片]", true,
+            listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), mime))))
+        messages.add(item); saveMessage(item)
+
+        // Compress + upload via HTTP in background
         scope.launch(Dispatchers.IO) {
-            val result = wsClient?.uploadFile(file.name, bytes, mime)
-            if (result != null) {
-                // Upload succeeded — agent will process and respond
-                val item = MessageItem.ChatMsg(ChatMessage("[上传了图片: ${file.name}]", true,
-                    listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), mime))))
-                withContext(Dispatchers.Main) {
-                    messages.add(item); saveMessage(item)
+            try {
+                // Step 1: Compress image (resize max 1024px, JPEG quality 70%)
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(file.absolutePath, opts)
+                val maxDim = 1024
+                val scale = if (opts.outWidth > opts.outHeight) opts.outWidth / maxDim else opts.outHeight / maxDim
+                val sampleSize = if (scale < 1) 1 else scale.coerceAtMost(8)
+                val loadOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                var bitmap = BitmapFactory.decodeFile(file.absolutePath, loadOpts)
+                if (bitmap != null && (bitmap.width > maxDim || bitmap.height > maxDim)) {
+                    val ratio = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+                    val scaled = Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true)
+                    if (scaled != bitmap) bitmap.recycle()
+                    bitmap = scaled
                 }
-            } else {
-                withContext(Dispatchers.Main) {
-                    toast("图片上传失败")
+                val baos = java.io.ByteArrayOutputStream()
+                bitmap?.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+                bitmap?.recycle()
+                val compressed = baos.toByteArray()
+                Log.d(TAG, "Image compressed: ${file.length()} → ${compressed.size} bytes")
+
+                // Step 2: Upload via HTTP multipart
+                val httpUrl = AppSettings.getHttpUrl(this@MainActivity)
+                val result = wsClient?.uploadFile(file.name, compressed, "image/jpeg", httpUrl)
+                if (result != null) {
+                    Log.d(TAG, "Upload success: $result")
+                } else {
+                    withContext(Dispatchers.Main) { toast("图片上传失败") }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Image upload error", e)
+                withContext(Dispatchers.Main) { toast("图片上传失败: ${e.message}") }
             }
         }
     }
@@ -243,7 +269,33 @@ class MainActivity : ComponentActivity() {
         val file = File(uri.path ?: return)
         val item = MessageItem.ChatMsg(ChatMessage("[拍了一张照片]", true,
             listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), "image/jpeg"))))
-        messages.add(item); saveMessage(item); wsClient?.sendMessage("[用户拍了一张照片]")
+        messages.add(item); saveMessage(item)
+
+        // Compress + upload via HTTP
+        scope.launch(Dispatchers.IO) {
+            try {
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(file.absolutePath, opts)
+                val maxDim = 1024
+                val scale = if (opts.outWidth > opts.outHeight) opts.outWidth / maxDim else opts.outHeight / maxDim
+                val sampleSize = if (scale < 1) 1 else scale.coerceAtMost(8)
+                val loadOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                var bitmap = BitmapFactory.decodeFile(file.absolutePath, loadOpts)
+                if (bitmap != null && (bitmap.width > maxDim || bitmap.height > maxDim)) {
+                    val ratio = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+                    val scaled = Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true)
+                    if (scaled != bitmap) bitmap.recycle()
+                    bitmap = scaled
+                }
+                val baos = java.io.ByteArrayOutputStream()
+                bitmap?.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+                bitmap?.recycle()
+                val httpUrl = AppSettings.getHttpUrl(this@MainActivity)
+                wsClient?.uploadFile(file.name, baos.toByteArray(), "image/jpeg", httpUrl)
+            } catch (e: Exception) {
+                Log.e(TAG, "Camera upload error", e)
+            }
+        }
     }
 
     // ── Approval ──────────────────────────────────
@@ -607,7 +659,9 @@ class MainActivity : ComponentActivity() {
     }
     private suspend fun uploadTrainingSample(wavPath: String, text: String) {
         try {
-            val baseUrl = AppSettings.getHttpUrl(this@MainActivity)
+            val rawUrl = AppSettings.getHttpUrl(this@MainActivity)
+            // Normalize: strip ws:// or wss:// if user accidentally saved WS URL in HTTP field
+            val baseUrl = rawUrl.replace(Regex("^ws://"), "http://").replace(Regex("^wss://"), "https://")
             val url = java.net.URL("$baseUrl/v1/training")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val conn = url.openConnection() as java.net.HttpURLConnection

@@ -169,7 +169,7 @@ object BackupUtil {
                 val session = SessionEntity(
                     name = sObj.optString("name", "已恢复会话"),
                     hermesSessionId = sObj.optString("hermesSessionId", UUID.randomUUID().toString()),
-                    profile = targetProfile,  // 强制归入当前 Profile
+                    profile = sObj.optString("profile", targetProfile),  // 从备份恢复原始 Profile，缺省用当前
                     createdAt = sObj.optLong("createdAt", System.currentTimeMillis()),
                     isPinned = sObj.optBoolean("isPinned", false),
                     isArchived = sObj.optBoolean("isArchived", false),

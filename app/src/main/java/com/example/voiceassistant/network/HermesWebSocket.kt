@@ -3,6 +3,7 @@ package com.example.voiceassistant.network
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -346,7 +347,7 @@ class HermesWebSocket(
     }
 
     /** 上传文件到 Hermes 服务器，返回文件信息 JSON（含 file_id, name, url 等） */
-    fun uploadFile(fileName: String, fileBytes: ByteArray, mimeType: String = "image/jpeg"): String? {
+    fun uploadFile(fileName: String, fileBytes: ByteArray, mimeType: String = "image/jpeg", httpUrl: String = httpBaseUrl): String? {
         return try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -355,19 +356,21 @@ class HermesWebSocket(
             val body = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", fileName,
-                    RequestBody.create(okhttp3.MediaType.parse(mimeType), fileBytes))
+                    RequestBody.create(mimeType.toMediaType(), fileBytes))
                 .build()
             val request = Request.Builder()
-                .url("$httpBaseUrl/v1/upload?session_id=$sessionId")
+                .url("$httpUrl/v1/upload?session_id=$sessionId")
                 .post(body)
                 .build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 response.body?.string()
             } else {
+                android.util.Log.e("Sage", "uploadFile HTTP ${response.code}: ${response.message}")
                 null
             }
         } catch (e: Exception) {
+            android.util.Log.e("Sage", "uploadFile error: ${e.message}", e)
             null
         }
     }
