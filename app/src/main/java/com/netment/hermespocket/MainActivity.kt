@@ -13,6 +13,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.provider.DocumentsContract
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
@@ -125,9 +127,9 @@ class MainActivity : ComponentActivity() {
     }
     private var pendingTakePhoto = false
 
-    // ── 备份导入文件选择器 ──
-    private val backupImportLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { handleBackupImport(it) }
+    // ── 备份导入文件选择器（直接定位到 SageBackup 目录）──
+    private val backupImportLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.data?.let { handleBackupImport(it) }
     }
 
     // ── 会话导入文件选择器 ──
@@ -403,7 +405,7 @@ class MainActivity : ComponentActivity() {
                     confirmButton = {
                         TextButton(onClick = {
                             showImportConfirm = false
-                            backupImportLauncher.launch("*/*")
+                            backupImportLauncher.launch(launchBackupImportIntent())
                         }) { Text("确定", color = ComposeColor(0xFFEF4444)) }
                     },
                     dismissButton = {
@@ -846,6 +848,17 @@ class MainActivity : ComponentActivity() {
     private fun importBackup() {
         // 弹出确认框
         showImportConfirm = true
+    }
+
+    /** 创建导入 Intent，文件选择器直接定位到 Documents/SageBackup/ */
+    private fun launchBackupImportIntent(): Intent {
+        val backupDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "SageBackup")
+        backupDir.mkdirs()
+        return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.fromFile(backupDir))
+        }
     }
 
     private fun handleBackupImport(uri: android.net.Uri) {

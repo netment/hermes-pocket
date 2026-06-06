@@ -14,13 +14,13 @@ import java.util.*
 
 /**
  * 全量备份/恢复：导出所有会话+消息+设置 → .sagebackup JSON
- * 存到 Documents/有数备份/ 目录，与 Downloads 隔离，卸载后文件不丢失。
+ * 存到 Documents/SageBackup/ 目录，与 Downloads 隔离，卸载后文件不丢失。
  */
 object BackupUtil {
 
     private const val BACKUP_VERSION = 1
     private const val FILE_EXT = ".sagebackup"
-    private const val BACKUP_DIR = "有数备份"
+    private const val BACKUP_DIR = "SageBackup"
 
     data class ImportResult(
         val sessionsRestored: Int,
@@ -109,8 +109,8 @@ object BackupUtil {
                 put("sessions", sessionsArr)
             }
 
-            // 写入 Documents/有数备份/ 目录
-            val fileName = "有数备份_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}$FILE_EXT"
+            // 写入 Documents/SageBackup/ 目录
+            val fileName = "SageBackup_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}$FILE_EXT"
             val backupDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), BACKUP_DIR)
             backupDir.mkdirs()
             val file = File(backupDir, fileName)
