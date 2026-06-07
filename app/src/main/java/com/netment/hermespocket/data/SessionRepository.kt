@@ -86,7 +86,7 @@ class SessionRepository(private val sessionDao: SessionDao, private val messageD
                 isActive = entity.isActive, isPinned = entity.isPinned,
                 isArchived = false, preview = preview, lastMsgTime = lastTime
             )
-        }
+        }.sortedWith(compareByDescending<SessionInfo> { it.isPinned }.thenByDescending { it.lastMsgTime })
         val archived = sessionDao.getArchived(profile).map { entity ->
             val preview = messageDao?.getLastMessageText(entity.id) ?: ""
             val lastTime = messageDao?.getLastMessageTime(entity.id) ?: 0L
@@ -95,7 +95,7 @@ class SessionRepository(private val sessionDao: SessionDao, private val messageD
                 isActive = false, isPinned = false,
                 isArchived = true, preview = preview, lastMsgTime = lastTime
             )
-        }
+        }.sortedByDescending { it.lastMsgTime }
         return Pair(active, archived)
     }
 }

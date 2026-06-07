@@ -4,8 +4,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -190,9 +192,10 @@ private fun ArchivedHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) 
 }
 
 // ═══════════════════════════════════════════════
-//  Session item (WeChat-style)
+//  Session item — 长按弹出菜单，微信风格
 // ═══════════════════════════════════════════════
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionItem(
     session: SessionInfo,
@@ -207,111 +210,108 @@ private fun SessionItem(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf(session.name) }
 
-    Surface(
-        color = if (session.isActive) Color(0xFF1A1A2E) else Color(0xFF0F0F1A),
-        modifier = Modifier.fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Avatar placeholder
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF2563EB)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    session.name.take(1),
-                    color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold
+    Box {
+        Surface(
+            color = if (session.isActive) Color(0xFF1A1A2E) else Color(0xFF0F0F1A),
+            modifier = Modifier.fillMaxWidth()
+                .combinedClickable(
+                    onClick = { onClick() },
+                    onLongClick = { showMenu = true }
                 )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (session.isPinned) {
-                        Text("📌 ", fontSize = 11.sp)
-                    }
+        ) {
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Avatar placeholder
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF2563EB)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        session.name,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = if (session.isActive) FontWeight.Bold else FontWeight.Normal,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        session.name.take(1),
+                        color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        formatRelativeTime(session.lastMsgTime),
-                        color = Color(0xFF64748B), fontSize = 11.sp
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    // More menu button
-                    Box(modifier = Modifier.clickable { showMenu = true }) {
-                        Icon(
-                            Icons.Default.MoreVert, "更多",
-                            tint = Color(0xFF475569), modifier = Modifier.size(16.dp)
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (session.isPinned) {
+                            Text("📌 ", fontSize = 11.sp)
+                        }
+                        Text(
+                            session.name,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = if (session.isActive) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
-                        // ── 长按菜单（定位在图标下方）──
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            offset = DpOffset(0.dp, 0.dp)
-                        ) {
-                            if (onPin != null) {
-                                DropdownMenuItem(
-                                    text = { Text(if (session.isPinned) "📌 取消置顶" else "📌 置顶") },
-                                    onClick = { showMenu = false; onPin() }
-                                )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            formatRelativeTime(session.lastMsgTime),
+                            color = Color(0xFF64748B), fontSize = 11.sp
+                        )
+                    }
+                    if (session.preview.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (session.isArchived) {
+                                Surface(
+                                    shape = RoundedCornerShape(3.dp),
+                                    color = Color(0xFF334155)
+                                ) {
+                                    Text("归档", color = Color(0xFF94A3B8), fontSize = 9.sp,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                }
+                                Spacer(Modifier.width(6.dp))
                             }
-                            if (onUnarchive != null) {
-                                DropdownMenuItem(
-                                    text = { Text("📤 取消归档") },
-                                    onClick = { showMenu = false; onUnarchive() }
-                                )
-                            }
-                            if (onArchive != null) {
-                                DropdownMenuItem(
-                                    text = { Text("📦 归档") },
-                                    onClick = { showMenu = false; onArchive() }
-                                )
-                            }
-                            if (onRename != null) {
-                                DropdownMenuItem(
-                                    text = { Text("✏️ 重命名") },
-                                    onClick = { showMenu = false; showRenameDialog = true }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("🗑️ 删除", color = Color(0xFFEF4444)) },
-                                onClick = { showMenu = false; onDelete?.invoke() }
+                            Text(
+                                session.preview.take(40) + if (session.preview.length > 40) "…" else "",
+                                color = Color(0xFF64748B), fontSize = 13.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
-                if (session.preview.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (!session.isActive) {
-                            Surface(
-                                shape = RoundedCornerShape(3.dp),
-                                color = Color(0xFF334155)
-                            ) {
-                                Text("归档", color = Color(0xFF94A3B8), fontSize = 9.sp,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
-                            }
-                            Spacer(Modifier.width(6.dp))
-                        }
-                        Text(
-                            session.preview.take(40) + if (session.preview.length > 40) "…" else "",
-                            color = Color(0xFF64748B), fontSize = 13.sp,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
             }
+        }
+
+        // 长按弹出菜单
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false }
+        ) {
+            if (onPin != null) {
+                DropdownMenuItem(
+                    text = { Text(if (session.isPinned) "📌 取消置顶" else "📌 置顶") },
+                    onClick = { showMenu = false; onPin() }
+                )
+            }
+            if (onUnarchive != null) {
+                DropdownMenuItem(
+                    text = { Text("📤 取消归档") },
+                    onClick = { showMenu = false; onUnarchive() }
+                )
+            }
+            if (onArchive != null) {
+                DropdownMenuItem(
+                    text = { Text("📦 归档") },
+                    onClick = { showMenu = false; onArchive() }
+                )
+            }
+            if (onRename != null) {
+                DropdownMenuItem(
+                    text = { Text("✏️ 重命名") },
+                    onClick = { showMenu = false; showRenameDialog = true }
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("🗑️ 删除", color = Color(0xFFEF4444)) },
+                onClick = { showMenu = false; onDelete?.invoke() }
+            )
         }
     }
 

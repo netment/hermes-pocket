@@ -9,11 +9,11 @@ interface SessionDao {
     suspend fun insert(session: SessionEntity): Long
 
     /** 指定 Profile 的活跃会话列表：置顶在前，归档隐藏 */
-    @Query("SELECT * FROM sessions WHERE profile = :profile AND isArchived = 0 ORDER BY isPinned DESC, createdAt ASC")
+    @Query("SELECT * FROM sessions WHERE profile = :profile AND isArchived = 0 ORDER BY isPinned DESC, id DESC")
     suspend fun getByProfile(profile: String): List<SessionEntity>
 
     /** 指定 Profile 的已归档会话 */
-    @Query("SELECT * FROM sessions WHERE profile = :profile AND isArchived = 1 ORDER BY createdAt ASC")
+    @Query("SELECT * FROM sessions WHERE profile = :profile AND isArchived = 1 ORDER BY id DESC")
     suspend fun getArchived(profile: String): List<SessionEntity>
 
     @Query("SELECT * FROM sessions WHERE isActive = 1 LIMIT 1")

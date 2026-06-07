@@ -183,7 +183,7 @@ class MainActivity : ComponentActivity() {
             pendingShareText = null
             val display = "[分享] " + if (text.length > 200) text.take(200) + "…" else text
             val item = MessageItem.ChatMsg(ChatMessage(display, true))
-            messages.add(item); saveMessage(item); wsClient?.sendMessage(text)
+            messages.add(0, item); saveMessage(item); wsClient?.sendMessage(text)
         }
         pendingShareImageUri?.let { uri ->
             pendingShareImageUri = null
@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
             if (file != null) {
                 val item = MessageItem.ChatMsg(ChatMessage("[分享了一张图片]", true,
                     listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), "image/jpeg"))))
-                messages.add(item); saveMessage(item); wsClient?.sendMessage("[用户分享了一张图片]")
+                messages.add(0, item); saveMessage(item); wsClient?.sendMessage("[用户分享了一张图片]")
             }
         }
     }
@@ -207,7 +207,7 @@ class MainActivity : ComponentActivity() {
         val msg = if (mime.startsWith("image/")) "[上传了图片: $name]" else "[上传了文件: $name (${FileUtils.formatSize(size)})]"
         val item = MessageItem.ChatMsg(ChatMessage(msg, true,
             listOf(HermesWebSocket.Attachment(name, file.absolutePath, size, mime))))
-        messages.add(item); saveMessage(item); wsClient?.sendMessage(msg)
+        messages.add(0, item); saveMessage(item); wsClient?.sendMessage(msg)
 
         // Upload file bytes via HTTP in background
         scope.launch(Dispatchers.IO) {
@@ -235,7 +235,7 @@ class MainActivity : ComponentActivity() {
         // Show sending UI immediately
         val item = MessageItem.ChatMsg(ChatMessage("[上传了一张图片]", true,
             listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), mime))))
-        messages.add(item); saveMessage(item)
+        messages.add(0, item); saveMessage(item)
 
         // Compress + upload via HTTP in background
         scope.launch(Dispatchers.IO) {
@@ -289,7 +289,7 @@ class MainActivity : ComponentActivity() {
         val file = FileUtils.copyUriToCache(this, uri, "photo.jpg") ?: return
         val item = MessageItem.ChatMsg(ChatMessage("[拍了一张照片]", true,
             listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), "image/jpeg"))))
-        messages.add(item); saveMessage(item)
+        messages.add(0, item); saveMessage(item)
 
         // Compress + upload via HTTP
         scope.launch(Dispatchers.IO) {
@@ -347,9 +347,9 @@ class MainActivity : ComponentActivity() {
     private fun refreshSessionList() { scope.launch { val (active, archived) = sessionRepo.getSessionsWithPreview(activeProfile); sessionList.clear(); sessionList.addAll(active); archivedSessionList.clear(); archivedSessionList.addAll(archived) } }
     private fun refreshDashboard() { scope.launch { dashboardStats = msgRepo.getDashboardStats(sessionRepo.count()) } }
 
-    private fun switchSession(id: Long) { scope.launch { wsClient?.disconnect(); wsJob?.cancel(); sessionRepo.switchTo(id); val s = sessionRepo.getByProfile(activeProfile).find { it.id == id } ?: return@launch; currentSession = s; loadInitialPage(id); assistantMode = AssistantMode.NORMAL; connectionStatus = "切换中..."; connectWs(s.hermesSessionId); refreshSessionList() } }
-    private fun newSession() { scope.launch { wsClient?.disconnect(); wsJob?.cancel(); val count = sessionRepo.getByProfile(activeProfile).size; val s = sessionRepo.create("${AppSettings.getProfileName(activeProfile)} 会话 ${count + 1}", activeProfile); currentSession = s; messages.clear(); connectionStatus = "新建..."; connectWs(s.hermesSessionId); refreshSessionList(); refreshDashboard() } }
-    private fun deleteSession(id: Long) { scope.launch { val all = sessionRepo.getByProfile(activeProfile); if (all.size <= 1) return@launch; msgRepo.deleteBySession(id); sessionRepo.delete(id); if (currentSession?.id == id) { val t = all.first { it.id != id }; sessionRepo.switchTo(t.id); currentSession = t; loadInitialPage(t.id); wsClient?.disconnect(); wsJob?.cancel(); connectWs(t.hermesSessionId) }; refreshSessionList(); refreshDashboard() } }
+    private fun switchSession(id: Long) { messages.clear(); scope.launch { wsClient?.disconnect(); wsJob?.cancel(); sessionRepo.switchTo(id); val s = sessionRepo.getByProfile(activeProfile).find { it.id == id } ?: return@launch; currentSession = s; loadInitialPage(id); assistantMode = AssistantMode.NORMAL; connectionStatus = "切换中..."; connectWs(s.hermesSessionId); refreshSessionList() } }
+    private fun newSession() { messages.clear(); scope.launch { wsClient?.disconnect(); wsJob?.cancel(); val count = sessionRepo.getByProfile(activeProfile).size; val s = sessionRepo.create("${AppSettings.getProfileName(activeProfile)} 会话 ${count + 1}", activeProfile); currentSession = s; connectionStatus = "新建..."; connectWs(s.hermesSessionId); refreshSessionList(); refreshDashboard() } }
+    private fun deleteSession(id: Long) { scope.launch { val all = sessionRepo.getByProfile(activeProfile); if (all.size <= 1) return@launch; msgRepo.deleteBySession(id); sessionRepo.delete(id); if (currentSession?.id == id) { val t = all.first { it.id != id }; messages.clear(); sessionRepo.switchTo(t.id); currentSession = t; loadInitialPage(t.id); wsClient?.disconnect(); wsJob?.cancel(); connectWs(t.hermesSessionId) }; refreshSessionList(); refreshDashboard() } }
     private fun renameSession(id: Long, name: String) { scope.launch { sessionRepo.rename(id, name); refreshSessionList() } }
     private fun pinSession(id: Long, pinned: Boolean) { scope.launch { sessionRepo.pin(id, pinned); refreshSessionList() } }
     private fun archiveSession(id: Long) { scope.launch { sessionRepo.archive(id, true); refreshSessionList(); if (currentSession?.id == id) { val a = sessionRepo.getByProfile(activeProfile); if (a.isNotEmpty()) switchSession(a.first().id) } } }
@@ -545,23 +545,23 @@ class MainActivity : ComponentActivity() {
         // 显示清理后的回复
         if (cleanText.isNotBlank()) {
             val item = MessageItem.ChatMsg(ChatMessage(cleanText, false))
-            messages.add(item); saveMessage(item)
+            messages.add(0, item); saveMessage(item)
         }
         // 执行工具并注入结果
         val result = PhoneTools.execute(this@MainActivity, toolCall)
         val resultItem = MessageItem.ChatMsg(ChatMessage("[工具: ${toolCall.name}] $result", true))
-        messages.add(resultItem); saveMessage(resultItem)
+        messages.add(0, resultItem); saveMessage(resultItem)
         c.sendMessage("[工具结果: ${toolCall.name}] $result")
     } else {
         val a = m.attachments.map { HermesWebSocket.Attachment(it.name, it.url, it.size, it.mime) }
         val item = MessageItem.ChatMsg(ChatMessage(m.text, false, a))
         isThinking = false
-        messages.add(item); saveMessage(item)
+        messages.add(0, item); saveMessage(item)
         PollWorker.setLastMsgId(this@MainActivity, PollWorker.getLastMsgId(this@MainActivity) + 1)
         // TTS auto-speak disabled — Peft to cloud CosyVoice TTS via Hermes
         if (ttsEnabled && m.text.isNotBlank()) playTts(m.text)
     }
-} }; launch { for (s in c.statusChannel) { connectionStatus = s } }; launch { for (state in c.connectionStateChannel) { connectionState = state } }; launch { for (tp in c.toolChannel) { connectionStatus = if (tp.label.isNotBlank()) tp.label else "执行: ${tp.tool}" } }; launch { for (ap in c.approvalChannel) { pendingApproval = ap; connectionStatus = "等待确认"; messages.add(MessageItem.ApprovalItem(ap)); saveMessage(messages.last()) } }; launch { for (r in c.approvalResolvedChannel) { resolvePendingApproval(if (r.approved) ApprovalStatus.APPROVED else ApprovalStatus.DENIED); connectionStatus = if (r.approved) "已批准" else "已拒绝" } }; launch { for (st in c.sessionStateChannel) { when (st.state) { "thinking" -> { isThinking = true; connectionStatus = "思考中..." }; "awaiting_clarify" -> connectionStatus = "等待回复"; "ready" -> { isThinking = false; connectionStatus = "就绪" } } } }; launch { for (cl in c.clarifyChannel) { connectionStatus = "等待回复"; messages.add(MessageItem.ClarifyItem(cl)); saveMessage(messages.last()) } }; launch { for (cr in c.clarifyResolvedChannel) { val idx = messages.indexOfLast { it is MessageItem.ClarifyItem && it.prompt.clarifyId == cr.clarifyId }; if (idx >= 0) { val item = messages[idx] as MessageItem.ClarifyItem; messages[idx] = item.copy(status = ClarifyStatus.RESOLVED) }; connectionStatus = "就绪" } }; launch { for (stp in c.stepChannel) { connectionStatus = "步骤: ${stp.title}"; val stepInfos = stp.steps.map { s -> StepInfo(s.label, when(s.status) { "done" -> StepStatus.DONE; "running" -> StepStatus.RUNNING; "error" -> StepStatus.ERROR; else -> StepStatus.WAITING }) }; messages.add(MessageItem.StepItem(stp.title, stepInfos)) } }; launch { for (sg in c.suggestionChannel) { messages.add(MessageItem.SuggestionItem(sg.title, sg.content)) } }; launch { for (ec in c.errorCardChannel) { connectionStatus = "错误: ${ec.error.take(15)}"; messages.add(MessageItem.ErrorItem(ec.error, ec.retryable)) } }; launch { for (e in c.errorChannel) { connectionStatus = "错误: ${e.take(15)}"; messages.add(MessageItem.ChatMsg(ChatMessage("⚠️ 错误: $e", false))) } }; launch { for (f in c.fileChannel) { val label = if (f.mime.startsWith("image/")) "🖼️ 图片已上传" else "📎 ${f.name} 已上传"; withContext(Dispatchers.Main) { toast(label) } } }; c.connect(); connectionStatus = "就绪"
+} }; launch { for (s in c.statusChannel) { connectionStatus = s } }; launch { for (state in c.connectionStateChannel) { connectionState = state } }; launch { for (tp in c.toolChannel) { connectionStatus = if (tp.label.isNotBlank()) tp.label else "执行: ${tp.tool}" } }; launch { for (ap in c.approvalChannel) { pendingApproval = ap; connectionStatus = "等待确认"; messages.add(0, MessageItem.ApprovalItem(ap)); saveMessage(messages[0]) } }; launch { for (r in c.approvalResolvedChannel) { resolvePendingApproval(if (r.approved) ApprovalStatus.APPROVED else ApprovalStatus.DENIED); connectionStatus = if (r.approved) "已批准" else "已拒绝" } }; launch { for (st in c.sessionStateChannel) { when (st.state) { "thinking" -> { isThinking = true; connectionStatus = "思考中..." }; "awaiting_clarify" -> connectionStatus = "等待回复"; "ready" -> { isThinking = false; connectionStatus = "就绪" } } } }; launch { for (cl in c.clarifyChannel) { connectionStatus = "等待回复"; messages.add(0, MessageItem.ClarifyItem(cl)); saveMessage(messages[0]) } }; launch { for (cr in c.clarifyResolvedChannel) { val idx = messages.indexOfLast { it is MessageItem.ClarifyItem && it.prompt.clarifyId == cr.clarifyId }; if (idx >= 0) { val item = messages[idx] as MessageItem.ClarifyItem; messages[idx] = item.copy(status = ClarifyStatus.RESOLVED) }; connectionStatus = "就绪" } }; launch { for (stp in c.stepChannel) { connectionStatus = "步骤: ${stp.title}"; val stepInfos = stp.steps.map { s -> StepInfo(s.label, when(s.status) { "done" -> StepStatus.DONE; "running" -> StepStatus.RUNNING; "error" -> StepStatus.ERROR; else -> StepStatus.WAITING }) }; messages.add(0, MessageItem.StepItem(stp.title, stepInfos)) } }; launch { for (sg in c.suggestionChannel) { messages.add(0, MessageItem.SuggestionItem(sg.title, sg.content)) } }; launch { for (ec in c.errorCardChannel) { connectionStatus = "错误: ${ec.error.take(15)}"; messages.add(0, MessageItem.ErrorItem(ec.error, ec.retryable)) } }; launch { for (e in c.errorChannel) { connectionStatus = "错误: ${e.take(15)}"; messages.add(0, MessageItem.ChatMsg(ChatMessage("⚠️ 错误: $e", false))) } }; launch { for (f in c.fileChannel) { val label = if (f.mime.startsWith("image/")) "🖼️ 图片已上传" else "📎 ${f.name} 已上传"; withContext(Dispatchers.Main) { toast(label) } } }; c.connect(); connectionStatus = "就绪"
         PollWorker.enqueue(this@MainActivity); loadSkills() } }
     private fun reconnectWs() { scope.launch { connectionStatus = "重连中..."; connectWs(currentSession?.hermesSessionId ?: UUID.randomUUID().toString()) } }
 
@@ -626,7 +626,7 @@ class MainActivity : ComponentActivity() {
             isLoadingMore = false
             withContext(Dispatchers.Main) {
                 messages.clear()
-                messages.addAll(page)
+                messages.addAll(page.reversed())
             }
         }
     }
@@ -642,7 +642,7 @@ class MainActivity : ComponentActivity() {
             hasMoreOlder = offset > 0
             isLoadingMore = false
             withContext(Dispatchers.Main) {
-                messages.addAll(0, page)
+                messages.addAll(page.reversed())
             }
         }
     }
@@ -787,7 +787,7 @@ class MainActivity : ComponentActivity() {
 
         val displayText = if (assistantMode != AssistantMode.NORMAL) "[${assistantMode.label}] $text" else text
         val item = MessageItem.ChatMsg(ChatMessage(displayText, true, status = MessageStatus.SENDING))
-        messages.add(item)
+        messages.add(0, item)
         pendingText = ""
         accumulatedText = ""
 

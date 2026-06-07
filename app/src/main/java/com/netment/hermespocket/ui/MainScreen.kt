@@ -191,12 +191,13 @@ fun MainScreen(
     var editedText by remember { mutableStateOf("") }
     var showEditDialog by remember { mutableStateOf(false) }
 
-    // 滚动到顶自动加载更多
+    // reverseLayout: index 0=最新(底部), index N=最旧(顶部), 自然零闪烁
+    // 滚动到顶（index N=最旧消息）自动加载更多
     if (hasMoreOlder && !isLoadingMore) {
         val firstVisible = listState.firstVisibleItemIndex
         val scrollOffset = listState.firstVisibleItemScrollOffset
         LaunchedEffect(firstVisible, scrollOffset) {
-            if (firstVisible == 0 && scrollOffset == 0) {
+            if (firstVisible == messages.lastIndex && scrollOffset == 0) {
                 onLoadMore?.invoke()
             }
         }
@@ -211,9 +212,6 @@ fun MainScreen(
 
     LaunchedEffect(isRecording) {
         if (!isRecording && liveText.isNotBlank()) inputText = liveText
-    }
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
     // P2: 外部剪贴板内容填到输入框
     LaunchedEffect(fillInputText) {
@@ -572,31 +570,11 @@ fun MainScreen(
             }
             LazyColumn(
                 state = listState,
+                reverseLayout = true,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 content = {
-                    // 顶部加载指示器
-                    if (isLoadingMore) {
-                        item {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color(0xFF94A3B8)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("载入中...", color = Color(0xFF94A3B8), fontSize = 12.sp)
-                            }
-                        }
-                    } else if (hasMoreOlder) {
-                        item {
-                            Row(Modifier.fillMaxWidth().clickable { onLoadMore?.invoke() }.padding(8.dp),
-                                horizontalArrangement = Arrangement.Center) {
-                                Text("📜 查看更早的消息", color = Color(0xFF60A5FA), fontSize = 12.sp)
-                            }
-                        }
-                    }
                     itemsIndexed(messages) { idx, item ->
                         when (item) {
                             is MessageItem.ChatMsg -> {
@@ -633,6 +611,27 @@ fun MainScreen(
                                 onDismiss = null
                             )
                             is MessageItem.ThinkingItem -> { /* no-op: now shown in top bar subtitle */ }
+                        }
+                    }
+                    // 视觉顶部（旧消息之上）：加载更多
+                    if (isLoadingMore) {
+                        item {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("载入中...", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                            }
+                        }
+                    } else if (hasMoreOlder) {
+                        item {
+                            Row(Modifier.fillMaxWidth().clickable { onLoadMore?.invoke() }.padding(8.dp),
+                                horizontalArrangement = Arrangement.Center) {
+                                Text("📜 查看更早的消息", color = Color(0xFF60A5FA), fontSize = 12.sp)
+                            }
                         }
                     }
                 }
