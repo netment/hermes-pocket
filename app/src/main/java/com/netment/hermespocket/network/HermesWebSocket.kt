@@ -293,6 +293,7 @@ class HermesWebSocket internal constructor(
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         Log.e("HermesWS", "onFailure: ${t.message}", t)
                         connected = false
+                        ws = null
                         scope.launch {
                             connectionStateChannel.value = ConnectionState.DISCONNECTED
                             statusChannel.send("连接失败: ${t.message}")
@@ -303,6 +304,7 @@ class HermesWebSocket internal constructor(
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         Log.w("HermesWS", "onClosed code=$code reason=$reason")
                         connected = false
+                        ws = null
                         scope.launch { connectionStateChannel.value = ConnectionState.DISCONNECTED }
                         scheduleReconnect()
                     }
