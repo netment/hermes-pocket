@@ -78,7 +78,7 @@ sherpa-onnx ASR             + /v1/capabilities 代理        capabilities.db
 ### 方式一：下载 APK（推荐）
 
 1. **下载 APK**  
-   从百度网盘（链接待更新）下载最新版 APK
+   从 [GitHub Releases](https://github.com/netment/hermes-pocket/releases) 下载最新版 APK
 
 2. **安装到手机**  
    将 APK 传到手机，点击安装（需允许「未知来源」安装）

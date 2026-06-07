@@ -76,7 +76,7 @@ sherpa-onnx ASR             + /v1/capabilities proxy       capabilities.db
 ### Option 1: Phone App (for end users)
 
 1. **Download APK**  
-   Download the latest `hermes-pocket.apk` from [Baidu Cloud](https://pan.baidu.com) (link coming soon)
+   Download the latest APK from [GitHub Releases](https://github.com/netment/hermes-pocket/releases)
 
 2. **Install**  
    Transfer the APK to your phone and tap to install (allow "Unknown sources" if prompted)

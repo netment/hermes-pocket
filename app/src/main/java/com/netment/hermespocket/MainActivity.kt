@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.os.Build
 import com.netment.hermespocket.service.PollWorker
 import com.netment.hermespocket.service.PhoneTools
+import com.netment.hermespocket.service.HermesService
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
@@ -57,7 +58,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var engine: VoiceRecognitionEngine
     private lateinit var sessionRepo: SessionRepository
     private lateinit var msgRepo: MessageRepository
-    private var wsClient: HermesWebSocket? = null
+
     private var tts: TextToSpeech? = null
     private val messages = mutableStateListOf<MessageItem>()
     private var isRecording by mutableStateOf(false)
@@ -84,8 +85,10 @@ class MainActivity : ComponentActivity() {
     private var lastPromptedText: String? = null
     private var copyingInternally = false
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var wsJob: Job? = null
+
     private var currentSession by mutableStateOf<SessionEntity?>(null)
+    private var wsSessionId: String = ""
+    private var wsFlowJob: Job? = null
     private val sessionList = mutableStateListOf<SessionInfo>()
     private val archivedSessionList = mutableStateListOf<SessionInfo>()
     // ── Profile ──
@@ -144,10 +147,6 @@ class MainActivity : ComponentActivity() {
     // P2: 从后台恢复时检查剪贴板
     override fun onResume() {
         super.onResume()
-        // 切回前台时静默重连
-        if (wsClient == null || connectionStatus.contains("失败") || connectionStatus.contains("重连")) {
-            reconnectWs()
-        }
         // 权限通过后延迟启动相机
         if (pendingTakePhoto) {
             pendingTakePhoto = false
@@ -183,7 +182,7 @@ class MainActivity : ComponentActivity() {
             pendingShareText = null
             val display = "[分享] " + if (text.length > 200) text.take(200) + "…" else text
             val item = MessageItem.ChatMsg(ChatMessage(display, true))
-            messages.add(0, item); saveMessage(item); wsClient?.sendMessage(text)
+            messages.add(0, item); saveMessage(item); HermesWebSocket.get()?.sendMessage(text, emptySet(), wsSessionId)
         }
         pendingShareImageUri?.let { uri ->
             pendingShareImageUri = null
@@ -191,7 +190,7 @@ class MainActivity : ComponentActivity() {
             if (file != null) {
                 val item = MessageItem.ChatMsg(ChatMessage("[分享了一张图片]", true,
                     listOf(HermesWebSocket.Attachment(file.name, file.toURI().toString(), file.length(), "image/jpeg"))))
-                messages.add(0, item); saveMessage(item); wsClient?.sendMessage("[用户分享了一张图片]")
+                messages.add(0, item); saveMessage(item); HermesWebSocket.get()?.sendMessage("[用户分享了一张图片]", emptySet(), wsSessionId)
             }
         }
     }
@@ -207,14 +206,14 @@ class MainActivity : ComponentActivity() {
         val msg = if (mime.startsWith("image/")) "[上传了图片: $name]" else "[上传了文件: $name (${FileUtils.formatSize(size)})]"
         val item = MessageItem.ChatMsg(ChatMessage(msg, true,
             listOf(HermesWebSocket.Attachment(name, file.absolutePath, size, mime))))
-        messages.add(0, item); saveMessage(item); wsClient?.sendMessage(msg)
+        messages.add(0, item); saveMessage(item); HermesWebSocket.get()?.sendMessage(msg, emptySet(), wsSessionId)
 
         // Upload file bytes via HTTP in background
         scope.launch(Dispatchers.IO) {
             try {
                 val bytes = file.readBytes()
                 val httpUrl = AppSettings.getHttpUrl(this@MainActivity)
-                val result = wsClient?.uploadFile(name, bytes, mime, httpUrl)
+                val result = HermesWebSocket.get()?.uploadFile(name, bytes, mime, httpUrl)
                 if (result != null) {
                     Log.d(TAG, "File upload success: $result")
                     withContext(Dispatchers.Main) { toast("文件上传成功 ✓") }
@@ -262,7 +261,7 @@ class MainActivity : ComponentActivity() {
 
                 // Step 2: Upload via HTTP multipart
                 val httpUrl = AppSettings.getHttpUrl(this@MainActivity)
-                val result = wsClient?.uploadFile(file.name, compressed, "image/jpeg", httpUrl)
+                val result = HermesWebSocket.get()?.uploadFile(file.name, compressed, "image/jpeg", httpUrl)
                 if (result != null) {
                     Log.d(TAG, "Upload success: $result")
                 } else {
@@ -311,7 +310,7 @@ class MainActivity : ComponentActivity() {
                 bitmap?.compress(Bitmap.CompressFormat.JPEG, 70, baos)
                 bitmap?.recycle()
                 val httpUrl = AppSettings.getHttpUrl(this@MainActivity)
-                wsClient?.uploadFile(file.name, baos.toByteArray(), "image/jpeg", httpUrl)
+                HermesWebSocket.get()?.uploadFile(file.name, baos.toByteArray(), "image/jpeg", httpUrl)
             } catch (e: Exception) {
                 Log.e(TAG, "Camera upload error", e)
             }
@@ -347,9 +346,9 @@ class MainActivity : ComponentActivity() {
     private fun refreshSessionList() { scope.launch { val (active, archived) = sessionRepo.getSessionsWithPreview(activeProfile); sessionList.clear(); sessionList.addAll(active); archivedSessionList.clear(); archivedSessionList.addAll(archived) } }
     private fun refreshDashboard() { scope.launch { dashboardStats = msgRepo.getDashboardStats(sessionRepo.count()) } }
 
-    private fun switchSession(id: Long) { messages.clear(); scope.launch { wsClient?.disconnect(); wsJob?.cancel(); sessionRepo.switchTo(id); val s = sessionRepo.getByProfile(activeProfile).find { it.id == id } ?: return@launch; currentSession = s; loadInitialPage(id); assistantMode = AssistantMode.NORMAL; connectionStatus = "切换中..."; connectWs(s.hermesSessionId); refreshSessionList() } }
-    private fun newSession() { messages.clear(); scope.launch { wsClient?.disconnect(); wsJob?.cancel(); val count = sessionRepo.getByProfile(activeProfile).size; val s = sessionRepo.create("${AppSettings.getProfileName(activeProfile)} 会话 ${count + 1}", activeProfile); currentSession = s; connectionStatus = "新建..."; connectWs(s.hermesSessionId); refreshSessionList(); refreshDashboard() } }
-    private fun deleteSession(id: Long) { scope.launch { val all = sessionRepo.getByProfile(activeProfile); if (all.size <= 1) return@launch; msgRepo.deleteBySession(id); sessionRepo.delete(id); if (currentSession?.id == id) { val t = all.first { it.id != id }; messages.clear(); sessionRepo.switchTo(t.id); currentSession = t; loadInitialPage(t.id); wsClient?.disconnect(); wsJob?.cancel(); connectWs(t.hermesSessionId) }; refreshSessionList(); refreshDashboard() } }
+    private fun switchSession(id: Long) { messages.clear(); scope.launch { sessionRepo.switchTo(id); val s = sessionRepo.getByProfile(activeProfile).find { it.id == id } ?: return@launch; currentSession = s; wsSessionId = s.hermesSessionId; loadInitialPage(id); assistantMode = AssistantMode.NORMAL; Log.i(TAG, "switchSession: wsSessionId=${wsSessionId.take(8)}"); refreshSessionList() } }
+    private fun newSession() { messages.clear(); scope.launch { val count = sessionRepo.getByProfile(activeProfile).size; val s = sessionRepo.create("${AppSettings.getProfileName(activeProfile)} 会话 ${count + 1}", activeProfile); currentSession = s; wsSessionId = s.hermesSessionId; Log.i(TAG, "newSession: wsSessionId=${wsSessionId.take(8)}"); refreshSessionList(); refreshDashboard() } }
+    private fun deleteSession(id: Long) { scope.launch { val all = sessionRepo.getByProfile(activeProfile); if (all.size <= 1) return@launch; msgRepo.deleteBySession(id); sessionRepo.delete(id); if (currentSession?.id == id) { val t = all.first { it.id != id }; messages.clear(); sessionRepo.switchTo(t.id); currentSession = t; wsSessionId = t.hermesSessionId; Log.i(TAG, "deleteSession: wsSessionId=${wsSessionId.take(8)}"); loadInitialPage(t.id) }; refreshSessionList(); refreshDashboard() } }
     private fun renameSession(id: Long, name: String) { scope.launch { sessionRepo.rename(id, name); refreshSessionList() } }
     private fun pinSession(id: Long, pinned: Boolean) { scope.launch { sessionRepo.pin(id, pinned); refreshSessionList() } }
     private fun archiveSession(id: Long) { scope.launch { sessionRepo.archive(id, true); refreshSessionList(); if (currentSession?.id == id) { val a = sessionRepo.getByProfile(activeProfile); if (a.isNotEmpty()) switchSession(a.first().id) } } }
@@ -471,8 +470,8 @@ class MainActivity : ComponentActivity() {
                         connectionStatus, connectionState, if (isRecording) accumulatedText else pendingText,
                         { u, n -> NetworkUtils.downloadFile(this@MainActivity, AppSettings.getHttpUrl(this@MainActivity), u, n) },
                         pendingApproval != null,
-                        { c -> wsClient?.sendApproval(true, c); resolvePendingApproval(ApprovalStatus.APPROVED) },
-                        { wsClient?.sendApproval(false); resolvePendingApproval(ApprovalStatus.DENIED) },
+                        { c -> HermesWebSocket.get()?.sendApproval(true, c); resolvePendingApproval(ApprovalStatus.APPROVED) },
+                        { HermesWebSocket.get()?.sendApproval(false); resolvePendingApproval(ApprovalStatus.DENIED) },
                         { showSettings = true }, profileName, sessionList,
                         { switchSession(it) }, { newSession() }, { deleteSession(it) },
                         { sessionSearchMode = true; showSearch = true }, onExport = { exportCurrentSession() },
@@ -496,7 +495,7 @@ class MainActivity : ComponentActivity() {
                                 val item = messages[idx] as MessageItem.ClarifyItem
                                 messages[idx] = item.copy(selectedChoice = text)
                             }
-                            wsClient?.sendClarifyResponse(id, text)
+                            HermesWebSocket.get()?.sendClarifyResponse(id, text)
                         },
                         skillChips = skillChips.map { it.name },
                         selectedSkills = selectedSkills,
@@ -530,16 +529,21 @@ class MainActivity : ComponentActivity() {
 
     }
 
-    private fun initAll() { connectionStatus = "初始化..."; scope.launch { try { activeProfile = AppSettings.getActiveProfile(this@MainActivity); currentSession = sessionRepo.ensureActive(activeProfile); refreshSessionList(); refreshDashboard(); loadInitialPage(currentSession!!.id); engine.onStatus = { connectionStatus = it }; engine.onAsrResult = { liveText = it; accumulatedText = if (accumulatedText.isEmpty()) it else "$accumulatedText $it" }; engine.initialize(); connectionStatus = "连接中..."; connectWs(currentSession!!.hermesSessionId) } catch (e: Exception) { Log.e(TAG, "init", e); connectionStatus = "初始化失败: ${e.message}" } } }
+    private fun initAll() { connectionStatus = "初始化..."; scope.launch { try { activeProfile = AppSettings.getActiveProfile(this@MainActivity); currentSession = sessionRepo.ensureActive(activeProfile); refreshSessionList(); refreshDashboard(); loadInitialPage(currentSession!!.id); engine.onStatus = { connectionStatus = it }; engine.onAsrResult = { liveText = it; accumulatedText = if (accumulatedText.isEmpty()) it else "$accumulatedText $it" }; engine.initialize(); wsSessionId = currentSession!!.hermesSessionId; Log.i(TAG, "initAll: wsSessionId=${wsSessionId.take(8)}"); connectionStatus = "连接中..."; connectWs() } catch (e: Exception) { Log.e(TAG, "init", e); connectionStatus = "初始化失败: ${e.message}" } } }
 
     private fun connectWs(sid: String = "") {
-        wsJob?.cancel(); wsClient?.disconnect()
-        val url = AppSettings.getWsUrl(this); val id = sid.ifEmpty { UUID.randomUUID().toString() }
-        // 保存活跃会话 ID 供轮询用
-        getSharedPreferences(AppSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().putString("active_session_id", id).apply()
-        val c = HermesWebSocket(url, id); wsClient = c; wsJob = scope.launch { launch { for (m in c.assistantChannel) {
-    // 检测 tool_call
-    Log.d("Sage", "recv: " + m.text.take(80)); val toolCall = PhoneTools.extractToolCall(m.text)
+        getSharedPreferences(AppSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().putString("active_session_id", wsSessionId).apply()
+        // already listening? skip re-registration (session switch only updates wsSessionId)
+        if (wsFlowJob?.isActive == true) return
+        wsFlowJob = scope.launch {
+            // -- connection state --
+            launch { HermesService.connectionState.collect { state -> connectionState = state } }
+            launch { HermesService.connectionStatus.collect { s -> connectionStatus = s } }
+            // -- assistant messages (filter by session_id) --
+            launch { HermesService.assistantMessages.collect { m ->
+                if (m.sessionId != wsSessionId) return@collect
+                Log.i("Session", "recv: text=${m.text.take(30)} msg_sid=${m.sessionId.take(8)} cur_sid=${wsSessionId.take(8)}")
+    val toolCall = PhoneTools.extractToolCall(m.text)
     if (toolCall != null) {
         val cleanText = m.text.replace(Regex("```tool_call[^`]*```"), "").trim()
         // 显示清理后的回复
@@ -551,7 +555,7 @@ class MainActivity : ComponentActivity() {
         val result = PhoneTools.execute(this@MainActivity, toolCall)
         val resultItem = MessageItem.ChatMsg(ChatMessage("[工具: ${toolCall.name}] $result", true))
         messages.add(0, resultItem); saveMessage(resultItem)
-        c.sendMessage("[工具结果: ${toolCall.name}] $result")
+        HermesWebSocket.get()?.sendMessage("[工具结果: ${toolCall.name}] $result", emptySet(), wsSessionId)
     } else {
         val a = m.attachments.map { HermesWebSocket.Attachment(it.name, it.url, it.size, it.mime) }
         val item = MessageItem.ChatMsg(ChatMessage(m.text, false, a))
@@ -561,9 +565,62 @@ class MainActivity : ComponentActivity() {
         // TTS auto-speak disabled — Peft to cloud CosyVoice TTS via Hermes
         if (ttsEnabled && m.text.isNotBlank()) playTts(m.text)
     }
-} }; launch { for (s in c.statusChannel) { connectionStatus = s } }; launch { for (state in c.connectionStateChannel) { connectionState = state } }; launch { for (tp in c.toolChannel) { connectionStatus = if (tp.label.isNotBlank()) tp.label else "执行: ${tp.tool}" } }; launch { for (ap in c.approvalChannel) { pendingApproval = ap; connectionStatus = "等待确认"; messages.add(0, MessageItem.ApprovalItem(ap)); saveMessage(messages[0]) } }; launch { for (r in c.approvalResolvedChannel) { resolvePendingApproval(if (r.approved) ApprovalStatus.APPROVED else ApprovalStatus.DENIED); connectionStatus = if (r.approved) "已批准" else "已拒绝" } }; launch { for (st in c.sessionStateChannel) { when (st.state) { "thinking" -> { isThinking = true; connectionStatus = "思考中..." }; "awaiting_clarify" -> connectionStatus = "等待回复"; "ready" -> { isThinking = false; connectionStatus = "就绪" } } } }; launch { for (cl in c.clarifyChannel) { connectionStatus = "等待回复"; messages.add(0, MessageItem.ClarifyItem(cl)); saveMessage(messages[0]) } }; launch { for (cr in c.clarifyResolvedChannel) { val idx = messages.indexOfLast { it is MessageItem.ClarifyItem && it.prompt.clarifyId == cr.clarifyId }; if (idx >= 0) { val item = messages[idx] as MessageItem.ClarifyItem; messages[idx] = item.copy(status = ClarifyStatus.RESOLVED) }; connectionStatus = "就绪" } }; launch { for (stp in c.stepChannel) { connectionStatus = "步骤: ${stp.title}"; val stepInfos = stp.steps.map { s -> StepInfo(s.label, when(s.status) { "done" -> StepStatus.DONE; "running" -> StepStatus.RUNNING; "error" -> StepStatus.ERROR; else -> StepStatus.WAITING }) }; messages.add(0, MessageItem.StepItem(stp.title, stepInfos)) } }; launch { for (sg in c.suggestionChannel) { messages.add(0, MessageItem.SuggestionItem(sg.title, sg.content)) } }; launch { for (ec in c.errorCardChannel) { connectionStatus = "错误: ${ec.error.take(15)}"; messages.add(0, MessageItem.ErrorItem(ec.error, ec.retryable)) } }; launch { for (e in c.errorChannel) { connectionStatus = "错误: ${e.take(15)}"; messages.add(0, MessageItem.ChatMsg(ChatMessage("⚠️ 错误: $e", false))) } }; launch { for (f in c.fileChannel) { val label = if (f.mime.startsWith("image/")) "🖼️ 图片已上传" else "📎 ${f.name} 已上传"; withContext(Dispatchers.Main) { toast(label) } } }; c.connect(); connectionStatus = "就绪"
-        PollWorker.enqueue(this@MainActivity); loadSkills() } }
-    private fun reconnectWs() { scope.launch { connectionStatus = "重连中..."; connectWs(currentSession?.hermesSessionId ?: UUID.randomUUID().toString()) } }
+            } }
+            // -- other event flows (global, no session_id filter) --
+            launch { HermesService.toolProgress.collect { tp ->
+                connectionStatus = if (tp.label.isNotBlank()) tp.label else "执行: ${tp.tool}"
+            } }
+            launch { HermesService.approvalRequired.collect { ap ->
+                pendingApproval = ap; connectionStatus = "等待确认"
+                messages.add(0, MessageItem.ApprovalItem(ap)); saveMessage(messages[0])
+            } }
+            launch { HermesService.approvalResolved.collect { r ->
+                resolvePendingApproval(if (r.approved) ApprovalStatus.APPROVED else ApprovalStatus.DENIED)
+                connectionStatus = if (r.approved) "已批准" else "已拒绝"
+            } }
+            launch { HermesService.sessionState.collect { state ->
+                when (state) {
+                    "thinking" -> { isThinking = true; connectionStatus = "思考中..." }
+                    "awaiting_clarify" -> connectionStatus = "等待回复"
+                    "ready" -> { isThinking = false; connectionStatus = "就绪" }
+                }
+            } }
+            launch { HermesService.clarifyPrompt.collect { cl ->
+                connectionStatus = "等待回复"
+                messages.add(0, MessageItem.ClarifyItem(cl)); saveMessage(messages[0])
+            } }
+            launch { HermesService.clarifyResolved.collect { cr ->
+                val idx = messages.indexOfLast { it is MessageItem.ClarifyItem && it.prompt.clarifyId == cr.clarifyId }
+                if (idx >= 0) { val item = messages[idx] as MessageItem.ClarifyItem; messages[idx] = item.copy(status = ClarifyStatus.RESOLVED) }
+                connectionStatus = "就绪"
+            } }
+            launch { HermesService.stepData.collect { stp ->
+                connectionStatus = "步骤: ${stp.title}"
+                val stepInfos = stp.steps.map { s -> StepInfo(s.label, when(s.status) { "done" -> StepStatus.DONE; "running" -> StepStatus.RUNNING; "error" -> StepStatus.ERROR; else -> StepStatus.WAITING }) }
+                messages.add(0, MessageItem.StepItem(stp.title, stepInfos))
+            } }
+            launch { HermesService.suggestion.collect { sg ->
+                messages.add(0, MessageItem.SuggestionItem(sg.title, sg.content))
+            } }
+            launch { HermesService.errorCard.collect { ec ->
+                connectionStatus = "错误: ${ec.error.take(15)}"
+                messages.add(0, MessageItem.ErrorItem(ec.error, ec.retryable))
+            } }
+            launch { HermesService.serviceError.collect { e ->
+                connectionStatus = "错误: ${e.take(15)}"
+                messages.add(0, MessageItem.ChatMsg(ChatMessage("⚠️ 错误: $e", false)))
+            } }
+            launch { HermesService.fileReceived.collect { f ->
+                val label = if (f.mime.startsWith("image/")) "🖼️ 图片已上传" else "📎 ${f.name} 已上传"
+                withContext(Dispatchers.Main) { toast(label) }
+            } }
+        }
+        // ensure HermesService is running (WS is managed by Service)
+        HermesService.start(this@MainActivity)
+        PollWorker.enqueue(this@MainActivity); loadSkills()
+        connectionStatus = "就绪"
+    }
+    private fun reconnectWs() { scope.launch { connectionStatus = "重连中..."; connectWs() } }
 
     private fun playTts(text: String) {
         val rawUrl = AppSettings.getHttpUrl(this@MainActivity)
@@ -652,7 +709,6 @@ class MainActivity : ComponentActivity() {
         scope.launch {
             activeProfile = newProfile
             AppSettings.setActiveProfile(this@MainActivity, newProfile)
-            wsClient?.disconnect(); wsJob?.cancel()
             messages.clear()
             connectionStatus = "切换 Profile..."
             assistantMode = AssistantMode.NORMAL
@@ -794,7 +850,7 @@ class MainActivity : ComponentActivity() {
         scope.launch {
             currentSession?.let { msgRepo.insert(it.id, item.copy(msg = item.msg.copy(status = MessageStatus.SENT))) }
 
-            val ok = wsClient?.sendMessage(fullText, currentSkills) ?: false
+            val ok = HermesWebSocket.get()?.sendMessage(fullText, currentSkills, wsSessionId) ?: false
             if (ok) {
                 val idx = messages.indexOfLast { it is MessageItem.ChatMsg && it.msg.isUser && it.msg.status == MessageStatus.SENDING }
                 if (idx >= 0) { val msg = messages[idx] as MessageItem.ChatMsg; messages[idx] = msg.copy(msg = msg.msg.copy(status = MessageStatus.SENT)) }
@@ -811,7 +867,7 @@ class MainActivity : ComponentActivity() {
                     messages[idx] = msg.copy(msg = msg.msg.copy(status = MessageStatus.RETRYING, retryAttempt = attempt))
                 }
                 kotlinx.coroutines.delay(delayMs)
-                if (wsClient?.sendMessage(fullText, currentSkills) == true) {
+                if (HermesWebSocket.get()?.sendMessage(fullText, currentSkills, wsSessionId) == true) {
                     val idx2 = messages.indexOfLast { it is MessageItem.ChatMsg && it.msg.isUser && it.msg.status == MessageStatus.RETRYING }
                     if (idx2 >= 0) { val msg = messages[idx2] as MessageItem.ChatMsg; messages[idx2] = msg.copy(msg = msg.msg.copy(status = MessageStatus.SENT)) }
                     return@launch
@@ -869,8 +925,6 @@ class MainActivity : ComponentActivity() {
     private fun handleBackupImport(uri: android.net.Uri) {
         scope.launch {
             connectionStatus = "恢复中..."
-            wsClient?.disconnect()
-            wsJob?.cancel()
             messages.clear()
 
             val result = BackupUtil.importBackup(this@MainActivity, uri, sessionRepo, msgRepo)
@@ -923,6 +977,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         PollWorker.cancel(this)
         (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipboardListener)
-        engine.release(); wsClient?.disconnect(); tts?.shutdown(); scope.cancel(); super.onDestroy()
+        engine.release(); tts?.shutdown(); scope.cancel(); super.onDestroy()
     }
 }

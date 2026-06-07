@@ -3,6 +3,8 @@ MyBot — WebSocket platform adapter for custom Hermes clients.
 
 Plugin entry point: register(ctx) is called by Hermes plugin discovery.
 """
+__version__ = "0.2.0"
+
 
 import asyncio
 import json
@@ -33,6 +35,24 @@ from gateway.config import Platform, PlatformConfig
 
 logger = logging.getLogger("gateway.platforms.mybot")
 
+# Ensure mybot logs are visible regardless of gateway's handler level.
+# We add a dedicated handler so INFO/DEBUG messages survive even when
+# the gateway root handler filters at WARNING.
+_mybot_level_name = os.getenv("MYBOT_LOG_LEVEL", "INFO").upper()
+_mybot_level = getattr(logging, _mybot_level_name, logging.INFO)
+logger.setLevel(_mybot_level)
+if not any(isinstance(h, logging.StreamHandler) and getattr(h, '_mybot_owned', False) for h in logger.handlers):
+    _h = logging.StreamHandler()
+    _h.setLevel(_mybot_level)
+    _h.setFormatter(logging.Formatter(
+        "[mybot] [%(asctime)s] [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+    _h._mybot_owned = True  # tag so we don't add duplicates on reimport
+    logger.addHandler(_h)
+    # Don't propagate to root — our handler outputs directly
+    logger.propagate = False
+
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8643
 
@@ -55,7 +75,8 @@ class MyBotAdapter(BasePlatformAdapter):
         self._app = None
         self._runner = None
         self._site = None
-        self._ws_sessions: Dict[str, Any] = {}
+        self._ws_sessions: Dict[str, Any] = {}       # device_id → ws
+        self._session_to_device: Dict[str, str] = {}  # hermes_session_id → device_id
         self._ws_lock = asyncio.Lock()
         self._file_registry: Dict[str, dict] = {}   # file_id → {path, name, size, mime}
         self._msg_counters: Dict[str, int] = {}     # session_id → last msg id
@@ -70,7 +91,7 @@ class MyBotAdapter(BasePlatformAdapter):
             logger.error("[mybot] aiohttp not installed")
             return False
 
-        self._app = web.Application(client_max_size=200 * 1024 * 1024)  # 200MB for video uploads
+        self._app = web.Application()
         self._app["mybot_adapter"] = self
         self._app.router.add_get("/v1/ws", self._handle_ws)
         self._app.router.add_get("/health", self._handle_health)
@@ -86,13 +107,14 @@ class MyBotAdapter(BasePlatformAdapter):
         await self._site.start()
 
         self._mark_connected()
-        logger.info("[mybot] ws://%s:%s/v1/ws", self._host, self._port)
+        logger.info("[mybot] v%s ws://%s:%s/v1/ws", __version__, self._host, self._port)
         return True
 
     async def disconnect(self) -> None:
         async with self._ws_lock:
             sessions = list(self._ws_sessions.items())
             self._ws_sessions.clear()
+            self._session_to_device.clear()
         for _, ws in sessions:
             try:
                 await ws.close(code=1001, message=b"Server shutdown")
@@ -166,6 +188,7 @@ class MyBotAdapter(BasePlatformAdapter):
         await self._ws_send(ws, {
             "type": "assistant_message",
             "text": content,
+            "session_id": chat_id,
         })
         self._track_msg(chat_id, content)
         await self._ws_send(ws, {"type": "session_state", "state": "ready"})
@@ -285,32 +308,39 @@ class MyBotAdapter(BasePlatformAdapter):
     async def _handle_ws(self, request) -> Any:
         ws = web.WebSocketResponse(heartbeat=30.0)
         await ws.prepare(request)
-        session_id = request.query.get("session_id", str(uuid.uuid4()))
+        device_id = request.query.get("device_id", str(uuid.uuid4()))
+        logger.info("[mybot] WS connect: device_id=%s remote=%s", device_id, request.remote)
 
         async with self._ws_lock:
-            old = self._ws_sessions.pop(session_id, None)
+            old = self._ws_sessions.pop(device_id, None)
         if old is not None:
             try:
                 await old.close()
             except Exception:
                 pass
         async with self._ws_lock:
-            self._ws_sessions[session_id] = ws
+            self._ws_sessions[device_id] = ws
 
         await self._ws_send(ws, {"type": "status", "text": "已连接 Hermes"})
 
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
-                    await self._on_text(ws, session_id, msg.data)
+                    await self._on_text(ws, device_id, msg.data)
                 elif msg.type in (web.WSMsgType.ERROR, web.WSMsgType.CLOSE):
                     break
         finally:
             async with self._ws_lock:
-                self._ws_sessions.pop(session_id, None)
+                self._ws_sessions.pop(device_id, None)
+                # Clean up all session→device mappings for this device
+                stale = [sid for sid, did in self._session_to_device.items() if did == device_id]
+                for sid in stale:
+                    self._session_to_device.pop(sid, None)
+                logger.info("[mybot] WS disconnect: device_id=%s sessions_cleaned=%d remaining_devices=%d",
+                            device_id, len(stale), len(self._ws_sessions))
         return ws
 
-    async def _on_text(self, ws, session_id: str, raw: str):
+    async def _on_text(self, ws, device_id: str, raw: str):
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -326,13 +356,22 @@ class MyBotAdapter(BasePlatformAdapter):
             text = data.get("text", "").strip()
             if not text:
                 return
+            # Read hermes session_id from message body; update reverse mapping
+            hermes_session_id = data.get("session_id", "") or device_id
+            async with self._ws_lock:
+                old_device = self._session_to_device.get(hermes_session_id)
+                self._session_to_device[hermes_session_id] = device_id
+            if old_device != device_id:
+                logger.info("[mybot] session mapping: session_id=%s device_id=%s (was=%s)",
+                            hermes_session_id[:8], device_id, old_device[:8] if old_device else "new")
+
             await self._ws_send(ws, {"type": "session_state", "state": "thinking"})
             event = MessageEvent(
                 text=text,
                 message_type=MessageType.TEXT,
                 source=SessionSource(
                     platform=Platform("mybot"),
-                    chat_id=session_id,
+                    chat_id=hermes_session_id,
                     user_id="mybot-user",
                 ),
                 message_id=str(uuid.uuid4()),
@@ -357,7 +396,7 @@ class MyBotAdapter(BasePlatformAdapter):
                         cmd = approval_data.get("command", "")
                         desc = approval_data.get("description", "")
                         asyncio.run_coroutine_threadsafe(
-                            self.send_exec_approval(session_id, cmd, session_key, desc),
+                            self.send_exec_approval(hermes_session_id, cmd, session_key, desc),
                             asyncio.get_running_loop()
                         )
 
@@ -395,13 +434,13 @@ class MyBotAdapter(BasePlatformAdapter):
 
                         # Send the CLEANED text (no MEDIA: tags, no raw paths)
                         if cleaned:
-                            await self.send(session_id, cleaned)
+                            await self.send(hermes_session_id, cleaned)
 
                         # Deliver extracted files
                         for file_path, _is_voice in media_files:
-                            await self._send_file_via_ws(session_id, file_path)
+                            await self._send_file_via_ws(hermes_session_id, file_path)
                         for file_path in local_files:
-                            await self._send_file_via_ws(session_id, file_path)
+                            await self._send_file_via_ws(hermes_session_id, file_path)
                     finally:
                         unregister_gateway_notify(session_key)
                 except Exception as e:
@@ -417,12 +456,21 @@ class MyBotAdapter(BasePlatformAdapter):
             try:
                 from tools.approval import resolve_gateway_approval
                 from gateway.session import build_session_key
-                # Build session_key the same way the agent thread does
-                sk = build_session_key(SessionSource(
-                    platform=Platform("mybot"), chat_id=session_id, user_id="mybot-user"
-                ))
-                count = resolve_gateway_approval(sk, approval_choice)
-                logger.info("[mybot] resolve approval: sk=%s choice=%s count=%d", sk[:30], approval_choice, count)
+                # Find which hermes session(s) this device owns with pending approvals
+                async with self._ws_lock:
+                    candidates = [sid for sid, did in self._session_to_device.items() if did == device_id]
+                resolved = False
+                for sid in candidates:
+                    sk = build_session_key(SessionSource(
+                        platform=Platform("mybot"), chat_id=sid, user_id="mybot-user"
+                    ))
+                    count = resolve_gateway_approval(sk, approval_choice)
+                    if count > 0:
+                        logger.info("[mybot] resolve approval: sk=%s choice=%s count=%d", sk[:30], approval_choice, count)
+                        resolved = True
+                        break
+                if not resolved and candidates:
+                    logger.warning("[mybot] resolve approval: no pending approval found for device=%s", device_id)
                 await self._ws_send(ws, {"type": "approval_resolved", "approved": approved, "choice": approval_choice})
             except Exception as e:
                 logger.error("[mybot] resolve approval error: %s", e)
@@ -442,9 +490,27 @@ class MyBotAdapter(BasePlatformAdapter):
 
     # ── Helpers ──────────────────────────────
 
-    async def _get_ws(self, session_id: str):
+    async def _get_ws(self, chat_id: str):
+        """Look up WebSocket by chat_id (hermes session_id or device_id).
+        
+        Resolution order:
+        1. chat_id in _session_to_device → device_id → _ws_sessions[device_id]
+        2. chat_id directly in _ws_sessions (device_id or legacy session_id)
+        """
         async with self._ws_lock:
-            return self._ws_sessions.get(session_id)
+            device_id = self._session_to_device.get(chat_id)
+            if device_id is not None:
+                ws = self._ws_sessions.get(device_id)
+                if ws is None:
+                    logger.warning("[mybot] _get_ws: session_id=%s → device_id=%s but device not connected",
+                                   chat_id[:8], device_id)
+                return ws
+            # Fallback: try direct lookup (device_id or legacy)
+            ws = self._ws_sessions.get(chat_id)
+            if ws is None and chat_id:
+                logger.warning("[mybot] _get_ws: chat_id=%s not found in mapping or sessions (mappings=%d sessions=%d)",
+                               chat_id[:8], len(self._session_to_device), len(self._ws_sessions))
+            return ws
 
     async def _ws_send(self, ws, data: dict):
         try:
@@ -538,9 +604,14 @@ class MyBotAdapter(BasePlatformAdapter):
 
         # Send a message to the agent about the uploaded file
         session_id = request.query.get("session_id", "")
+        device_id = request.query.get("device_id", "")
         if session_id:
+            # Update reverse mapping so _get_ws can route by session_id
+            if device_id:
+                async with self._ws_lock:
+                    self._session_to_device[session_id] = device_id
             event = MessageEvent(
-                text=f"[用户上传了文件: {safe_name}]",
+                text=f"[用户上传了图片: {safe_name}]",
                 message_type=MessageType.TEXT,
                 source=SessionSource(
                     platform=Platform("mybot"),
@@ -661,6 +732,8 @@ class MyBotAdapter(BasePlatformAdapter):
         preview = text.strip().replace('\n', ' ')[:80]
         self._msg_previews[session_id] = preview
         self._save_counters()
+        logger.info("[mybot] track_msg: session_id=%s counter=%d preview=%s",
+                     session_id[:8], c, preview[:50])
 
     async def _handle_poll(self, request) -> Any:
         """Poll for new messages since a given message ID."""
@@ -670,6 +743,10 @@ class MyBotAdapter(BasePlatformAdapter):
         current = self._msg_counters.get(session_id, 0)
         has_new = current > since
         preview = self._msg_previews.get(session_id, "")
+
+        logger.info("[mybot] poll: session_id=%s since=%d current=%d has_new=%s count=%d remote=%s",
+                    session_id[:8] if session_id else "(empty)", since, current,
+                    has_new, current - since if has_new else 0, request.remote)
 
         return web.json_response({
             "session_id": session_id,

@@ -2,6 +2,8 @@ package com.netment.hermespocket.network
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import android.util.Log
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
@@ -22,12 +24,34 @@ import java.util.concurrent.TimeUnit
  *         {"type":"status","text":"..."}
  *         {"type":"error","text":"..."}
  */
-class HermesWebSocket(
-    private val baseUrl: String = "ws://localhost:8643",
-    val sessionId: String = java.util.UUID.randomUUID().toString()
+class HermesWebSocket internal constructor(
+    val baseUrl: String,
+    val deviceId: String
 ) {
     // HTTP base URL derived from ws:// → http://
     val httpBaseUrl: String = baseUrl.replaceFirst("^ws", "http")
+
+    companion object {
+        @Volatile private var _instance: HermesWebSocket? = null
+
+        fun getOrCreate(baseUrl: String, deviceId: String): HermesWebSocket {
+            return _instance ?: synchronized(this) {
+                _instance ?: HermesWebSocket(baseUrl, deviceId).also { _instance = it }
+            }
+        }
+
+        fun get(): HermesWebSocket? = _instance
+
+        fun destroy() {
+            synchronized(this) {
+                _instance?.disconnect()
+                _instance = null
+            }
+        }
+    }
+
+    /** 前台标记：Activity onResume=true, onPause=false */
+    @Volatile var isForeground = false
     
     // 输出通道
     val assistantChannel = Channel<AssistantMessage>(Channel.BUFFERED)
@@ -45,7 +69,7 @@ class HermesWebSocket(
     val fileChannel = Channel<Attachment>(Channel.BUFFERED)
 
     enum class ConnectionState { CONNECTING, CONNECTED, DISCONNECTED }
-    val connectionStateChannel = Channel<ConnectionState>(Channel.CONFLATED)
+    val connectionStateChannel = MutableStateFlow(ConnectionState.DISCONNECTED)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -61,7 +85,8 @@ class HermesWebSocket(
 
     data class AssistantMessage(
         val text: String,
-        val attachments: List<Attachment> = emptyList()
+        val attachments: List<Attachment> = emptyList(),
+        val sessionId: String = ""
     )
 
     data class Attachment(
@@ -116,20 +141,24 @@ class HermesWebSocket(
     )
 
     fun connect() {
+        if (connected || ws != null) return  // already connecting/connected
+        reconnectAttempts = 0  // reset for fresh connection
+        Log.d("HermesWS", "connect: ${baseUrl}/v1/ws?device_id=$deviceId")
         scope.launch {
             try {
-                connectionStateChannel.trySend(ConnectionState.CONNECTING)
+                connectionStateChannel.value = ConnectionState.CONNECTING
                 statusChannel.send("连接中...")
                 val request = Request.Builder()
-                    .url("$baseUrl/v1/ws?session_id=$sessionId")
+                    .url("$baseUrl/v1/ws?device_id=$deviceId")
                     .build()
 
                 ws = client.newWebSocket(request, object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
+                        Log.i("HermesWS", "onOpen connected")
                         connected = true
                         reconnectAttempts = 0
                         scope.launch {
-                            connectionStateChannel.send(ConnectionState.CONNECTED)
+                            connectionStateChannel.value = ConnectionState.CONNECTED
                             statusChannel.send("已连接")
                         }
                     }
@@ -159,7 +188,9 @@ class HermesWebSocket(
                                         }
                                     }
                                     scope.launch {
-                                        assistantChannel.send(AssistantMessage(msgText, atts))
+                                        val sid = json.optString("session_id", "")
+                                        Log.i("Session", "recv assistant: text=${msgText.take(30)} session_id=${sid.take(8)}")
+                                        assistantChannel.send(AssistantMessage(msgText, atts, sid))
                                         statusChannel.send("就绪")
                                     }
                                 }
@@ -260,17 +291,19 @@ class HermesWebSocket(
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        Log.e("HermesWS", "onFailure: ${t.message}", t)
                         connected = false
                         scope.launch {
-                            connectionStateChannel.send(ConnectionState.DISCONNECTED)
+                            connectionStateChannel.value = ConnectionState.DISCONNECTED
                             statusChannel.send("连接失败: ${t.message}")
                         }
                         scheduleReconnect()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        Log.w("HermesWS", "onClosed code=$code reason=$reason")
                         connected = false
-                        scope.launch { connectionStateChannel.send(ConnectionState.DISCONNECTED) }
+                        scope.launch { connectionStateChannel.value = ConnectionState.DISCONNECTED }
                         scheduleReconnect()
                     }
                 })
@@ -285,11 +318,12 @@ class HermesWebSocket(
         if (reconnectAttempts >= maxReconnectAttempts) {
             scope.launch {
                 statusChannel.send("连接失败")
-                connectionStateChannel.send(ConnectionState.DISCONNECTED)
+                connectionStateChannel.value = ConnectionState.DISCONNECTED
             }
             return
         }
         reconnectAttempts++
+        Log.i("HermesWS", "scheduleReconnect attempt=$reconnectAttempts/$maxReconnectAttempts delay=${(reconnectAttempts * 2000L).coerceAtMost(30000L)}ms")
         scope.launch {
             delay((reconnectAttempts * 2000L).coerceAtMost(30000L))
             statusChannel.send("重连中...($reconnectAttempts/$maxReconnectAttempts)")
@@ -297,13 +331,15 @@ class HermesWebSocket(
         }
     }
 
-    fun sendMessage(text: String, selectedSkills: Set<String> = emptySet()): Boolean {
+    fun sendMessage(text: String, selectedSkills: Set<String> = emptySet(), targetSessionId: String = ""): Boolean {
         if (text.isBlank()) return false
-        if (!connected) return false
+        if (!connected) { Log.w("Session", "sendMessage: not connected"); return false }
+        val sid = targetSessionId.ifEmpty { deviceId }  // fallback to deviceId for legacy
+        Log.i("Session", "sendMessage: text=${text.take(30)} session_id=${sid.take(8)} skills=${selectedSkills.size}")
         val json = JSONObject().apply {
             put("type", "user_message")
             put("text", text)
-            put("session_id", sessionId)
+            put("session_id", sid)
             if (selectedSkills.isNotEmpty()) {
                 put("selectedSkills", JSONArray(selectedSkills.toList()))
             }
@@ -322,7 +358,7 @@ class HermesWebSocket(
         val json = JSONObject().apply {
             put("type", "user_message")
             put("text", "[系统] $text")
-            put("session_id", sessionId)
+            put("session_id", deviceId)
         }
         ws?.send(json.toString())
     }
@@ -346,7 +382,7 @@ class HermesWebSocket(
     }
 
     /** 上传文件到 Hermes 服务器，返回文件信息 JSON（含 file_id, name, url 等） */
-    fun uploadFile(fileName: String, fileBytes: ByteArray, mimeType: String = "image/jpeg", httpUrl: String = httpBaseUrl): String? {
+    fun uploadFile(fileName: String, fileBytes: ByteArray, mimeType: String = "image/jpeg", httpUrl: String = httpBaseUrl, targetSessionId: String = "", uploadDeviceId: String = ""): String? {
         return try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -358,8 +394,15 @@ class HermesWebSocket(
                 .addFormDataPart("file", fileName,
                     RequestBody.create(mimeType.toMediaType(), fileBytes))
                 .build()
+            val urlBuilder = StringBuilder("$httpUrl/v1/upload")
+            val params = mutableListOf<String>()
+            val sid = targetSessionId.ifEmpty { deviceId }
+            params.add("session_id=${java.net.URLEncoder.encode(sid, "UTF-8")}")
+            val did = uploadDeviceId.ifEmpty { deviceId }
+            params.add("device_id=${java.net.URLEncoder.encode(did, "UTF-8")}")
+            if (params.isNotEmpty()) urlBuilder.append("?").append(params.joinToString("&"))
             val request = Request.Builder()
-                .url("$httpUrl/v1/upload?session_id=$sessionId")
+                .url(urlBuilder.toString())
                 .post(body)
                 .build()
             val response = client.newCall(request).execute()
@@ -378,7 +421,7 @@ class HermesWebSocket(
     fun disconnect() {
         connected = false
         reconnectAttempts = maxReconnectAttempts
-        scope.launch { connectionStateChannel.send(ConnectionState.DISCONNECTED) }
+        scope.launch { connectionStateChannel.value = ConnectionState.DISCONNECTED }
         ws?.close(1000, "用户断开")
         scope.cancel()
     }
