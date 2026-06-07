@@ -4,10 +4,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,13 +19,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import com.netment.hermespocket.network.HermesWebSocket
 import java.text.SimpleDateFormat
 import java.util.*
@@ -195,7 +196,6 @@ private fun ArchivedHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) 
 //  Session item — 长按弹出菜单，微信风格
 // ═══════════════════════════════════════════════
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionItem(
     session: SessionInfo,
@@ -209,15 +209,21 @@ private fun SessionItem(
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf(session.name) }
+    var menuPosition by remember { mutableStateOf(Offset.Zero) }
 
     Box {
         Surface(
             color = if (session.isActive) Color(0xFF1A1A2E) else Color(0xFF0F0F1A),
             modifier = Modifier.fillMaxWidth()
-                .combinedClickable(
-                    onClick = { onClick() },
-                    onLongClick = { showMenu = true }
-                )
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { onClick() },
+                        onLongPress = { offset ->
+                            menuPosition = offset
+                            showMenu = true
+                        }
+                    )
+                }
         ) {
             Row(
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -279,39 +285,36 @@ private fun SessionItem(
             }
         }
 
-        // 长按弹出菜单
-        DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false }
-        ) {
-            if (onPin != null) {
-                DropdownMenuItem(
-                    text = { Text(if (session.isPinned) "📌 取消置顶" else "📌 置顶") },
-                    onClick = { showMenu = false; onPin() }
-                )
+        // 长按弹出菜单 — 出现在手指下方
+        if (showMenu) {
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(menuPosition.x.toInt(), menuPosition.y.toInt()),
+                onDismissRequest = { showMenu = false }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF1E293B),
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.widthIn(max = 180.dp)
+                ) {
+                    Column {
+                        if (onPin != null) {
+                            MenuRow(if (session.isPinned) "📌 取消置顶" else "📌 置顶") { showMenu = false; onPin() }
+                        }
+                        if (onUnarchive != null) {
+                            MenuRow("📤 取消归档") { showMenu = false; onUnarchive() }
+                        }
+                        if (onArchive != null) {
+                            MenuRow("📦 归档") { showMenu = false; onArchive() }
+                        }
+                        if (onRename != null) {
+                            MenuRow("✏️ 重命名") { showMenu = false; showRenameDialog = true }
+                        }
+                        MenuRow("🗑️ 删除", Color(0xFFEF4444)) { showMenu = false; onDelete?.invoke() }
+                    }
+                }
             }
-            if (onUnarchive != null) {
-                DropdownMenuItem(
-                    text = { Text("📤 取消归档") },
-                    onClick = { showMenu = false; onUnarchive() }
-                )
-            }
-            if (onArchive != null) {
-                DropdownMenuItem(
-                    text = { Text("📦 归档") },
-                    onClick = { showMenu = false; onArchive() }
-                )
-            }
-            if (onRename != null) {
-                DropdownMenuItem(
-                    text = { Text("✏️ 重命名") },
-                    onClick = { showMenu = false; showRenameDialog = true }
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("🗑️ 删除", color = Color(0xFFEF4444)) },
-                onClick = { showMenu = false; onDelete?.invoke() }
-            )
         }
     }
 
@@ -347,6 +350,23 @@ private fun SessionItem(
             containerColor = Color(0xFF1E293B)
         )
     }
+}
+
+// ═══════════════════════════════════════════════
+//  MenuRow — Popup 菜单项
+// ═══════════════════════════════════════════════
+
+@Composable
+private fun MenuRow(label: String, color: Color = Color.White, onClick: () -> Unit) {
+    Text(
+        label,
+        color = color,
+        fontSize = 14.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    )
 }
 
 // ═══════════════════════════════════════════════
