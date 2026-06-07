@@ -16,7 +16,7 @@ class VoiceRecognitionEngine(private val context: Context) {
     companion object {
         private const val TAG = "VoiceEngine"
         private const val SAMPLE_RATE = 16000
-        private const val MODEL_DIR = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09"
+        private const val MODEL_DIR = "sherpa-onnx-paraformer-trilingual-zh-cantonese-en"
     }
 
     private var vad: Vad? = null
@@ -35,7 +35,21 @@ class VoiceRecognitionEngine(private val context: Context) {
         try {
             onStatus?.invoke("初始化 VAD...")
             Log.i(TAG, "initVad: using silero_vad.onnx from assets")
-            val vadConfig = getVadModelConfig(type = 0)!!
+            val sileroConfig = SileroVadModelConfig(
+                model = "silero_vad.onnx",
+                threshold = 0.4f,              // 更灵敏 (默认0.5)
+                minSilenceDuration = 0.5f,      // 0.5s 静音判定结束
+                minSpeechDuration = 0.15f,      // 0.15s 即可触发 (默认~0.25)
+                maxSpeechDuration = 30.0f,      // 最长30s一段
+                windowSize = 512                // 与音频帧对齐
+            )
+            val vadConfig = VadModelConfig(
+                sileroVadModelConfig = sileroConfig,
+                sampleRate = SAMPLE_RATE,
+                numThreads = 2,
+                provider = "cpu",
+                debug = false
+            )
             vad = Vad(assetManager = context.assets, config = vadConfig)
             Log.i(TAG, "initVad done")
 
@@ -45,9 +59,8 @@ class VoiceRecognitionEngine(private val context: Context) {
             val asrConfig = OfflineRecognizerConfig(
                 featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
                 modelConfig = OfflineModelConfig().apply {
-                    senseVoice = OfflineSenseVoiceModelConfig(
-                        model = "$MODEL_DIR/model.int8.onnx",
-                        useInverseTextNormalization = true
+                    paraformer = OfflineParaformerModelConfig(
+                        model = "$MODEL_DIR/model.int8.onnx"
                     )
                     tokens = "$MODEL_DIR/tokens.txt"
                 }
